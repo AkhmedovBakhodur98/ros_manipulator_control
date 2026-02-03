@@ -1,0 +1,198 @@
+# Manipulator Parameters
+# All values from original SolidWorks-generated URDF
+
+# ============================================================================
+# BASE ASSEMBLY (Railway system: base_link + main_frame)
+# ============================================================================
+base_assembly:
+  # Base Link (Railway base)
+  base_link:
+    mesh: "base_link.STL"
+    color: [0.79216, 0.81961, 0.93333, 1.0]  # Light blue-grey
+    inertial:
+      mass: 32.4
+      origin: {xyz: [2.0, 1.1102e-16, -0.045], rpy: [0, 0, 0]}
+      inertia: {ixx: 0.027337, ixy: -6.8056e-16, ixz: 1.1565e-16,
+                iyy: 43.222, iyz: -4.2465e-19, izz: 43.205}
+
+  # Main Frame (Railway carriage)
+  main_frame:
+    mesh: "main_frame.STL"
+    color: [1.0, 0.67451, 0.027451, 1.0]  # Orange
+    inertial:
+      mass: 30.0
+      origin: {xyz: [0.2, -1.4456e-18, 1.0], rpy: [0, 0, 0]}
+      inertia: {ixx: 174.4, ixy: 3.0568e-15, ixz: 0.0,
+                iyy: 166.4, iyz: 0.0, izz: 20.8}
+
+  # Joint: base_link -> main_frame (X-axis rail)
+  base_main_frame_joint:
+    type: "prismatic"
+    origin: {xyz: [0, 0, 0], rpy: [0, 0, 0]}
+    axis: [1, 0, 0]  # X-axis movement
+    limits: {lower: 0.0, upper: 4.0, effort: 2000.0, velocity: 2.0}
+    dynamics: {damping: 0.0, friction: 0.0}
+
+# ============================================================================
+# SELECTOR ASSEMBLY (Container gripper: selector_frame + jaws + gripper + magnets)
+# ============================================================================
+selector_assembly:
+  # Selector Frame (vertical moving frame)
+  selector_frame:
+    mesh: "selector_frame.STL"
+    color: [0.79216, 0.81961, 0.93333, 1.0]  # Light blue-grey
+    inertial:
+      mass: 2.82
+      origin: {xyz: [-0.038, -3.2042e-17, -0.161], rpy: [0, 0, 0]}
+      inertia: {ixx: 0.39971, ixy: 5.6088e-17, ixz: 1.0745e-19,
+                iyy: 0.032046, iyz: 2.4617e-34, izz: 0.42647}
+
+  # Joint: main_frame -> selector_frame (Z-axis vertical)
+  main_frame_selector_frame_joint:
+    type: "prismatic"
+    origin: {xyz: [0.538, 0, 0.301], rpy: [0, 0, 0]}
+    axis: [0, 0, 1]  # Z-axis movement
+    limits: {lower: -0.01, upper: 1.5, effort: 2000.0, velocity: 2.0}
+    dynamics: {damping: 0.0, friction: 0.0}
+
+  # Left Container Jaw
+  left_container_jaw:
+    mesh: "left_container_jaw.STL"
+    color: [0.50196, 0.50196, 1.0, 1.0]  # Blue
+    inertial:
+      mass: 0.876
+      origin: {xyz: [0.11332, -0.005, -0.13866], rpy: [0, 0, 0]}
+      inertia: {ixx: 0.0049249, ixy: -1.3235e-20, ixz: -0.0026133,
+                iyy: 0.01802, iyz: 2.1507e-20, izz: 0.01311}
+
+  # Joint: selector_frame -> left_container_jaw (Y-axis opening)
+  selector_left_container_jaw_joint:
+    type: "prismatic"
+    origin: {xyz: [0.142, 0.2, -0.001], rpy: [0, 0, 0]}
+    axis: [0, -1, 0]  # -Y direction
+    limits: {lower: -0.2, upper: 0.2, effort: 2000.0, velocity: 1.0}
+    dynamics: {damping: 0.0, friction: 0.0}
+
+  # Right Container Jaw (mirrored)
+  right_container_jaw:
+    mesh: "right_container_jaw.STL"
+    color: [0.50196, 0.50196, 1.0, 1.0]  # Blue
+    inertial:
+      mass: 0.876
+      origin: {xyz: [0.11332, 0.005, -0.13866], rpy: [0, 0, 0]}
+      inertia: {ixx: 0.0049249, ixy: -1.3235e-20, ixz: -0.0026133,
+                iyy: 0.01802, iyz: 2.1507e-20, izz: 0.01311}
+
+  # Joint: selector_frame -> right_container_jaw
+  selector_right_container_jaw_joint:
+    type: "prismatic"
+    origin: {xyz: [0.142, -0.2, -0.001], rpy: [0, 0, 0]}
+    axis: [0, 1, 0]  # +Y direction (opposite of left)
+    limits: {lower: -0.2, upper: 0.2, effort: 2000.0, velocity: 1.0}
+    dynamics: {damping: 0.0, friction: 0.0}
+
+  # Gripper (magnet holder)
+  gripper:
+    mesh: "gripper.STL"
+    color: [0.79216, 0.81961, 0.93333, 1.0]  # Light blue-grey
+    inertial:
+      mass: 0.2432
+      origin: {xyz: [-1.1102e-16, 7.237e-18, 0], rpy: [0, 0, 0]}
+      inertia: {ixx: 0.00015897, ixy: 6.5527e-21, ixz: 6.5559e-22,
+                iyy: 0.00015897, iyz: -1.8991e-21, izz: 0.00025941}
+
+  # Joint: selector_frame -> gripper (Y-axis movement)
+  selector_frame_gripper_joint:
+    type: "prismatic"
+    origin: {xyz: [0, 0, 0], rpy: [0, 0, 0]}
+    axis: [0, 1, 0]  # Y-axis
+    limits: {lower: -0.4, upper: 0.4, effort: 2000.0, velocity: 1.0}
+    dynamics: {damping: 0.0, friction: 0.0}
+
+  # Left Gripper Magnet (origin frame only - no geometry)
+  # Joint: gripper -> left_gripper_magnet (fixed)
+  gripper_left_gripper_magnet_joint:
+    type: "fixed"
+    origin: {xyz: [0, 0.04, 0], rpy: [0, 0, 0]}
+
+  # Right Gripper Magnet (origin frame only - no geometry)
+  # Joint: gripper -> right_gripper_magnet (fixed)
+  gripper_right_gripper_magnet_joint:
+    type: "fixed"
+    origin: {xyz: [0, -0.04, 0], rpy: [0, 0, 0]}
+
+# ============================================================================
+# PICKER ASSEMBLY (Box picker: picker_frame + rail + base + jaw)
+# ============================================================================
+picker_assembly:
+  # Picker Frame (vertical moving frame for picker)
+  picker_frame:
+    mesh: "picker_frame.STL"
+    color: [0.50196, 1.0, 1.0, 1.0]  # Cyan
+    inertial:
+      mass: 2.72
+      origin: {xyz: [0.025, 5.6e-17, 0.08], rpy: [0, 0, 0]}
+      inertia: {ixx: 0.25589, ixy: -2.6522e-19, ixz: 2.0776e-19,
+                iyy: 0.013394, iyz: 1.2088e-17, izz: 0.24488}
+
+  # Joint: selector_frame -> picker_frame (Z-axis)
+  selector_frame_picker_frame_joint:
+    type: "prismatic"
+    origin: {xyz: [-0.138, 0, 0.144], rpy: [0, 0, 0]}
+    axis: [0, 0, 1]  # Z-axis
+    limits: {lower: -0.01, upper: 0.3, effort: 2000.0, velocity: 1.0}
+    dynamics: {damping: 0.0, friction: 0.0}
+
+  # Picker Rail (Y-axis rail)
+  picker_rail:
+    mesh: "picker_rail.STL"
+    color: [0, 1.0, 0, 1.0]  # Green
+    inertial:
+      mass: 0.42
+      origin: {xyz: [0.145, -1.2822e-17, 0.13], rpy: [0, 0, 0]}
+      inertia: {ixx: 0.0005075, ixy: 6.6386e-20, ixz: -2.0329e-20,
+                iyy: 0.004291, iyz: -7.6436e-22, izz: 0.0047915}
+
+  # Joint: picker_frame -> picker_rail (Y-axis)
+  picker_frame_picker_rail_joint:
+    type: "prismatic"
+    origin: {xyz: [0.08, 0, -0.075], rpy: [0, 0, 0]}
+    axis: [0, 1, 0]  # Y-axis
+    limits: {lower: -0.3, upper: 0.3, effort: 2000.0, velocity: 1.0}
+    dynamics: {damping: 0.0, friction: 0.0}
+
+  # Picker Base (X-axis slider)
+  picker_base:
+    mesh: "picker_base.STL"
+    color: [1.0, 1.0, 0, 1.0]  # Yellow
+    inertial:
+      mass: 0.8946
+      origin: {xyz: [0.14831, -1.0744e-17, 0.11353], rpy: [0, 0, 0]}
+      inertia: {ixx: 0.0011775, ixy: 1.2692e-19, ixz: -0.00020123,
+                iyy: 0.01028, iyz: -9.5697e-20, izz: 0.0112}
+
+  # Joint: picker_rail -> picker_base (X-axis)
+  picker_rail_picker_base_joint:
+    type: "prismatic"
+    origin: {xyz: [0, 0, 0], rpy: [0, 0, 0]}
+    axis: [1, 0, 0]  # X-axis
+    limits: {lower: 0.0, upper: 0.25, effort: 2000.0, velocity: 1.0}
+    dynamics: {damping: 0.0, friction: 0.0}
+
+  # Picker Jaw (gripper)
+  picker_jaw:
+    mesh: "picker_jaw.STL"
+    color: [1.0, 0.50196, 0.50196, 1.0]  # Pink
+    inertial:
+      mass: 0.0212
+      origin: {xyz: [0.005, -5.2028e-18, 0.052], rpy: [0, 0, 0]}
+      inertia: {ixx: 2.0557e-05, ixy: 4.4493e-24, ixz: -1.1834e-22,
+                iyy: 2.0027e-05, iyz: 2.6935e-21, izz: 8.8333e-07}
+
+  # Joint: picker_base -> picker_jaw (X-axis extension)
+  picker_base_picker_jaw_joint:
+    type: "prismatic"
+    origin: {xyz: [0, 0, 0], rpy: [0, 0, 0]}
+    axis: [1, 0, 0]  # X-axis
+    limits: {lower: 0.0, upper: 0.2, effort: 2000.0, velocity: 1.0}
+    dynamics: {damping: 0.0, friction: 0.0}

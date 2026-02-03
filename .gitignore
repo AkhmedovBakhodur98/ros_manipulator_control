@@ -1,0 +1,43 @@
+# ROS2 build artifacts
+build/
+install/
+log/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# ROS bag files
+*.bag
+*.db3
+
+# Compiled files
+*.o
+*.a
+*.lib
+
+# Generated URDF
+*.urdf
+!*.urdf.xacro
+
+# Colcon
+.colcon_defaults.yaml
+
+# Claude
+.claude/

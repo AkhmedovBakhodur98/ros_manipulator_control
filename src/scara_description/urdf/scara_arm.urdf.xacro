@@ -1,0 +1,365 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    SCARA Arm Assembly Xacro
+
+    3-DOF Selective Compliance Assembly Robot Arm
+    Can be mounted to any parent link via the scara_arm macro.
+
+    Joints:
+      - scara_shoulder_joint (theta1): Base rotation
+      - scara_elbow_joint (theta2): Arm reach
+      - scara_wrist_joint (theta3): End-effector orientation
+
+    Parameters loaded from: config/scara_params.yaml
+
+    Usage:
+      <xacro:include filename="$(find scara_description)/urdf/scara_arm.urdf.xacro"/>
+      <xacro:scara_arm
+        parent_link="some_parent"
+        config_file="$(find scara_description)/config/scara_params.yaml"/>
+  -->
+
+  <xacro:macro name="scara_arm" params="parent_link config_file">
+
+    <!-- Load parameters from YAML -->
+    <xacro:property name="params" value="${xacro.load_yaml(config_file)}"/>
+    <xacro:property name="mount" value="${params['mount']}"/>
+    <xacro:property name="kin" value="${params['kinematics']}"/>
+    <xacro:property name="links" value="${params['links']}"/>
+    <xacro:property name="joints" value="${params['joints']}"/>
+
+    <!-- Kinematic parameters -->
+    <xacro:property name="L1" value="${kin['L1']}"/>
+    <xacro:property name="L2" value="${kin['L2']}"/>
+
+    <!-- Mesh path -->
+    <xacro:property name="mesh_path" value="package://scara_description/meshes/scara"/>
+
+    <!-- ================================================================ -->
+    <!-- SCARA BASE LINK -->
+    <!-- ================================================================ -->
+    <link name="scara_base_link">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="${mesh_path}/${links['scara_base_link']['mesh']}"/>
+        </geometry>
+        <material name="scara_base_color">
+          <color rgba="${links['scara_base_link']['color'][0]} ${links['scara_base_link']['color'][1]} ${links['scara_base_link']['color'][2]} ${links['scara_base_link']['color'][3]}"/>
+        </material>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="${mesh_path}/${links['scara_base_link']['mesh']}"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <origin
+          xyz="${links['scara_base_link']['inertial']['origin']['xyz'][0]}
+               ${links['scara_base_link']['inertial']['origin']['xyz'][1]}
+               ${links['scara_base_link']['inertial']['origin']['xyz'][2]}"
+          rpy="${links['scara_base_link']['inertial']['origin']['rpy'][0]}
+               ${links['scara_base_link']['inertial']['origin']['rpy'][1]}
+               ${links['scara_base_link']['inertial']['origin']['rpy'][2]}"/>
+        <mass value="${links['scara_base_link']['inertial']['mass']}"/>
+        <inertia
+          ixx="${links['scara_base_link']['inertial']['inertia']['ixx']}"
+          ixy="${links['scara_base_link']['inertial']['inertia']['ixy']}"
+          ixz="${links['scara_base_link']['inertial']['inertia']['ixz']}"
+          iyy="${links['scara_base_link']['inertial']['inertia']['iyy']}"
+          iyz="${links['scara_base_link']['inertial']['inertia']['iyz']}"
+          izz="${links['scara_base_link']['inertial']['inertia']['izz']}"/>
+      </inertial>
+    </link>
+
+    <!-- JOINT: parent -> scara_base (Mount joint) -->
+    <joint name="scara_mount_joint" type="fixed">
+      <parent link="${parent_link}"/>
+      <child link="scara_base_link"/>
+      <origin
+        xyz="${mount['offset']['xyz'][0]} ${mount['offset']['xyz'][1]} ${mount['offset']['xyz'][2]}"
+        rpy="${mount['offset']['rpy'][0]} ${mount['offset']['rpy'][1]} ${mount['offset']['rpy'][2]}"/>
+    </joint>
+
+    <!-- ================================================================ -->
+    <!-- SHOULDER LINK -->
+    <!-- ================================================================ -->
+    <link name="scara_shoulder_link">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="${mesh_path}/${links['scara_shoulder_link']['mesh']}"/>
+        </geometry>
+        <material name="scara_shoulder_color">
+          <color rgba="${links['scara_shoulder_link']['color'][0]} ${links['scara_shoulder_link']['color'][1]} ${links['scara_shoulder_link']['color'][2]} ${links['scara_shoulder_link']['color'][3]}"/>
+        </material>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="${mesh_path}/${links['scara_shoulder_link']['mesh']}"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <origin
+          xyz="${links['scara_shoulder_link']['inertial']['origin']['xyz'][0]}
+               ${links['scara_shoulder_link']['inertial']['origin']['xyz'][1]}
+               ${links['scara_shoulder_link']['inertial']['origin']['xyz'][2]}"
+          rpy="${links['scara_shoulder_link']['inertial']['origin']['rpy'][0]}
+               ${links['scara_shoulder_link']['inertial']['origin']['rpy'][1]}
+               ${links['scara_shoulder_link']['inertial']['origin']['rpy'][2]}"/>
+        <mass value="${links['scara_shoulder_link']['inertial']['mass']}"/>
+        <inertia
+          ixx="${links['scara_shoulder_link']['inertial']['inertia']['ixx']}"
+          ixy="${links['scara_shoulder_link']['inertial']['inertia']['ixy']}"
+          ixz="${links['scara_shoulder_link']['inertial']['inertia']['ixz']}"
+          iyy="${links['scara_shoulder_link']['inertial']['inertia']['iyy']}"
+          iyz="${links['scara_shoulder_link']['inertial']['inertia']['iyz']}"
+          izz="${links['scara_shoulder_link']['inertial']['inertia']['izz']}"/>
+      </inertial>
+    </link>
+
+    <!-- SHOULDER JOINT (theta1) -->
+    <joint name="scara_shoulder_joint" type="${joints['scara_shoulder_joint']['type']}">
+      <parent link="scara_base_link"/>
+      <child link="scara_shoulder_link"/>
+      <origin
+        xyz="${joints['scara_shoulder_joint']['origin']['xyz'][0]}
+             ${joints['scara_shoulder_joint']['origin']['xyz'][1]}
+             ${joints['scara_shoulder_joint']['origin']['xyz'][2]}"
+        rpy="${joints['scara_shoulder_joint']['origin']['rpy'][0]}
+             ${joints['scara_shoulder_joint']['origin']['rpy'][1]}
+             ${joints['scara_shoulder_joint']['origin']['rpy'][2]}"/>
+      <axis xyz="${joints['scara_shoulder_joint']['axis'][0]}
+                 ${joints['scara_shoulder_joint']['axis'][1]}
+                 ${joints['scara_shoulder_joint']['axis'][2]}"/>
+      <limit
+        lower="${joints['scara_shoulder_joint']['limits']['lower']}"
+        upper="${joints['scara_shoulder_joint']['limits']['upper']}"
+        effort="${joints['scara_shoulder_joint']['limits']['effort']}"
+        velocity="${joints['scara_shoulder_joint']['limits']['velocity']}"/>
+      <dynamics
+        damping="${joints['scara_shoulder_joint']['dynamics']['damping']}"
+        friction="${joints['scara_shoulder_joint']['dynamics']['friction']}"/>
+    </joint>
+
+    <!-- ================================================================ -->
+    <!-- FOREARM LINK -->
+    <!-- ================================================================ -->
+    <link name="scara_forearm_link">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="${mesh_path}/${links['scara_forearm_link']['mesh']}"/>
+        </geometry>
+        <material name="scara_forearm_color">
+          <color rgba="${links['scara_forearm_link']['color'][0]} ${links['scara_forearm_link']['color'][1]} ${links['scara_forearm_link']['color'][2]} ${links['scara_forearm_link']['color'][3]}"/>
+        </material>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="${mesh_path}/${links['scara_forearm_link']['mesh']}"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <origin
+          xyz="${links['scara_forearm_link']['inertial']['origin']['xyz'][0]}
+               ${links['scara_forearm_link']['inertial']['origin']['xyz'][1]}
+               ${links['scara_forearm_link']['inertial']['origin']['xyz'][2]}"
+          rpy="${links['scara_forearm_link']['inertial']['origin']['rpy'][0]}
+               ${links['scara_forearm_link']['inertial']['origin']['rpy'][1]}
+               ${links['scara_forearm_link']['inertial']['origin']['rpy'][2]}"/>
+        <mass value="${links['scara_forearm_link']['inertial']['mass']}"/>
+        <inertia
+          ixx="${links['scara_forearm_link']['inertial']['inertia']['ixx']}"
+          ixy="${links['scara_forearm_link']['inertial']['inertia']['ixy']}"
+          ixz="${links['scara_forearm_link']['inertial']['inertia']['ixz']}"
+          iyy="${links['scara_forearm_link']['inertial']['inertia']['iyy']}"
+          iyz="${links['scara_forearm_link']['inertial']['inertia']['iyz']}"
+          izz="${links['scara_forearm_link']['inertial']['inertia']['izz']}"/>
+      </inertial>
+    </link>
+
+    <!-- ELBOW JOINT (theta2) -->
+    <joint name="scara_elbow_joint" type="${joints['scara_elbow_joint']['type']}">
+      <parent link="scara_shoulder_link"/>
+      <child link="scara_forearm_link"/>
+      <origin xyz="${L1} 0 0"
+              rpy="${joints['scara_elbow_joint']['origin']['rpy'][0]}
+                   ${joints['scara_elbow_joint']['origin']['rpy'][1]}
+                   ${joints['scara_elbow_joint']['origin']['rpy'][2]}"/>
+      <axis xyz="${joints['scara_elbow_joint']['axis'][0]}
+                 ${joints['scara_elbow_joint']['axis'][1]}
+                 ${joints['scara_elbow_joint']['axis'][2]}"/>
+      <limit
+        lower="${joints['scara_elbow_joint']['limits']['lower']}"
+        upper="${joints['scara_elbow_joint']['limits']['upper']}"
+        effort="${joints['scara_elbow_joint']['limits']['effort']}"
+        velocity="${joints['scara_elbow_joint']['limits']['velocity']}"/>
+      <dynamics
+        damping="${joints['scara_elbow_joint']['dynamics']['damping']}"
+        friction="${joints['scara_elbow_joint']['dynamics']['friction']}"/>
+    </joint>
+
+    <!-- ================================================================ -->
+    <!-- FLANGE LINK -->
+    <!-- ================================================================ -->
+    <link name="scara_flange_link">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="${mesh_path}/${links['scara_flange_link']['mesh']}"/>
+        </geometry>
+        <material name="scara_flange_color">
+          <color rgba="${links['scara_flange_link']['color'][0]} ${links['scara_flange_link']['color'][1]} ${links['scara_flange_link']['color'][2]} ${links['scara_flange_link']['color'][3]}"/>
+        </material>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="${mesh_path}/${links['scara_flange_link']['mesh']}"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <origin
+          xyz="${links['scara_flange_link']['inertial']['origin']['xyz'][0]}
+               ${links['scara_flange_link']['inertial']['origin']['xyz'][1]}
+               ${links['scara_flange_link']['inertial']['origin']['xyz'][2]}"
+          rpy="${links['scara_flange_link']['inertial']['origin']['rpy'][0]}
+               ${links['scara_flange_link']['inertial']['origin']['rpy'][1]}
+               ${links['scara_flange_link']['inertial']['origin']['rpy'][2]}"/>
+        <mass value="${links['scara_flange_link']['inertial']['mass']}"/>
+        <inertia
+          ixx="${links['scara_flange_link']['inertial']['inertia']['ixx']}"
+          ixy="${links['scara_flange_link']['inertial']['inertia']['ixy']}"
+          ixz="${links['scara_flange_link']['inertial']['inertia']['ixz']}"
+          iyy="${links['scara_flange_link']['inertial']['inertia']['iyy']}"
+          iyz="${links['scara_flange_link']['inertial']['inertia']['iyz']}"
+          izz="${links['scara_flange_link']['inertial']['inertia']['izz']}"/>
+      </inertial>
+    </link>
+
+    <!-- WRIST JOINT (theta3) -->
+    <joint name="scara_wrist_joint" type="${joints['scara_wrist_joint']['type']}">
+      <parent link="scara_forearm_link"/>
+      <child link="scara_flange_link"/>
+      <origin xyz="${L2} 0 -0.05"
+              rpy="${joints['scara_wrist_joint']['origin']['rpy'][0]}
+                   ${joints['scara_wrist_joint']['origin']['rpy'][1]}
+                   ${joints['scara_wrist_joint']['origin']['rpy'][2]}"/>
+      <axis xyz="${joints['scara_wrist_joint']['axis'][0]}
+                 ${joints['scara_wrist_joint']['axis'][1]}
+                 ${joints['scara_wrist_joint']['axis'][2]}"/>
+      <limit
+        lower="${joints['scara_wrist_joint']['limits']['lower']}"
+        upper="${joints['scara_wrist_joint']['limits']['upper']}"
+        effort="${joints['scara_wrist_joint']['limits']['effort']}"
+        velocity="${joints['scara_wrist_joint']['limits']['velocity']}"/>
+      <dynamics
+        damping="${joints['scara_wrist_joint']['dynamics']['damping']}"
+        friction="${joints['scara_wrist_joint']['dynamics']['friction']}"/>
+    </joint>
+
+    <!-- ================================================================ -->
+    <!-- TOOL BODY LINK -->
+    <!-- ================================================================ -->
+    <link name="tool_body_link">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="${mesh_path}/${links['tool_body_link']['mesh']}"/>
+        </geometry>
+        <material name="tool_body_color">
+          <color rgba="${links['tool_body_link']['color'][0]} ${links['tool_body_link']['color'][1]} ${links['tool_body_link']['color'][2]} ${links['tool_body_link']['color'][3]}"/>
+        </material>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="${mesh_path}/${links['tool_body_link']['mesh']}"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <origin
+          xyz="${links['tool_body_link']['inertial']['origin']['xyz'][0]}
+               ${links['tool_body_link']['inertial']['origin']['xyz'][1]}
+               ${links['tool_body_link']['inertial']['origin']['xyz'][2]}"
+          rpy="${links['tool_body_link']['inertial']['origin']['rpy'][0]}
+               ${links['tool_body_link']['inertial']['origin']['rpy'][1]}
+               ${links['tool_body_link']['inertial']['origin']['rpy'][2]}"/>
+        <mass value="${links['tool_body_link']['inertial']['mass']}"/>
+        <inertia
+          ixx="${links['tool_body_link']['inertial']['inertia']['ixx']}"
+          ixy="${links['tool_body_link']['inertial']['inertia']['ixy']}"
+          ixz="${links['tool_body_link']['inertial']['inertia']['ixz']}"
+          iyy="${links['tool_body_link']['inertial']['inertia']['iyy']}"
+          iyz="${links['tool_body_link']['inertial']['inertia']['iyz']}"
+          izz="${links['tool_body_link']['inertial']['inertia']['izz']}"/>
+      </inertial>
+    </link>
+
+    <!-- TOOL FIX JOINT -->
+    <joint name="tool_fix_joint" type="${joints['tool_fix_joint']['type']}">
+      <parent link="scara_flange_link"/>
+      <child link="tool_body_link"/>
+      <origin
+        xyz="${joints['tool_fix_joint']['origin']['xyz'][0]}
+             ${joints['tool_fix_joint']['origin']['xyz'][1]}
+             ${joints['tool_fix_joint']['origin']['xyz'][2]}"
+        rpy="${joints['tool_fix_joint']['origin']['rpy'][0]}
+             ${joints['tool_fix_joint']['origin']['rpy'][1]}
+             ${joints['tool_fix_joint']['origin']['rpy'][2]}"/>
+    </joint>
+
+    <!-- ================================================================ -->
+    <!-- TCP LINK (Tool Center Point) -->
+    <!-- ================================================================ -->
+    <link name="tcp_link">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <sphere radius="${links['tcp_link']['radius']}"/>
+        </geometry>
+        <material name="tcp_color">
+          <color rgba="${links['tcp_link']['color'][0]} ${links['tcp_link']['color'][1]} ${links['tcp_link']['color'][2]} ${links['tcp_link']['color'][3]}"/>
+        </material>
+      </visual>
+      <inertial>
+        <origin
+          xyz="${links['tcp_link']['inertial']['origin']['xyz'][0]}
+               ${links['tcp_link']['inertial']['origin']['xyz'][1]}
+               ${links['tcp_link']['inertial']['origin']['xyz'][2]}"
+          rpy="${links['tcp_link']['inertial']['origin']['rpy'][0]}
+               ${links['tcp_link']['inertial']['origin']['rpy'][1]}
+               ${links['tcp_link']['inertial']['origin']['rpy'][2]}"/>
+        <mass value="${links['tcp_link']['inertial']['mass']}"/>
+        <inertia
+          ixx="${links['tcp_link']['inertial']['inertia']['ixx']}"
+          ixy="${links['tcp_link']['inertial']['inertia']['ixy']}"
+          ixz="${links['tcp_link']['inertial']['inertia']['ixz']}"
+          iyy="${links['tcp_link']['inertial']['inertia']['iyy']}"
+          iyz="${links['tcp_link']['inertial']['inertia']['iyz']}"
+          izz="${links['tcp_link']['inertial']['inertia']['izz']}"/>
+      </inertial>
+    </link>
+
+    <!-- TCP JOINT -->
+    <joint name="tool_to_tcp_joint" type="${joints['tool_to_tcp_joint']['type']}">
+      <parent link="tool_body_link"/>
+      <child link="tcp_link"/>
+      <origin
+        xyz="${joints['tool_to_tcp_joint']['origin']['xyz'][0]}
+             ${joints['tool_to_tcp_joint']['origin']['xyz'][1]}
+             ${joints['tool_to_tcp_joint']['origin']['xyz'][2]}"
+        rpy="${joints['tool_to_tcp_joint']['origin']['rpy'][0]}
+             ${joints['tool_to_tcp_joint']['origin']['rpy'][1]}
+             ${joints['tool_to_tcp_joint']['origin']['rpy'][2]}"/>
+    </joint>
+
+  </xacro:macro>
+
+</robot>

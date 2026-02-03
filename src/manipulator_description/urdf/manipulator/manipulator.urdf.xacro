@@ -1,0 +1,59 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    Manipulator Assembly - Main Integration File (Simplified)
+
+    Combines all three manipulator sub-assemblies:
+      1. Base Assembly (base_link + main_frame + railway)
+      2. Selector Assembly (selector frame + container jaws + gripper + magnets)
+      3. Picker Assembly (picker frame + rail + base + jaw)
+
+    Usage:
+      <xacro:include filename="$(find manipulator_description)/urdf/manipulator/manipulator.urdf.xacro"/>
+      <xacro:manipulator config_file="$(find manipulator_description)/config/manipulator_params.yaml"/>
+
+    This creates the complete manipulator starting from base_link.
+  -->
+
+  <!-- Include all sub-assembly macros -->
+  <xacro:include filename="$(find manipulator_description)/urdf/manipulator/manipulator_base.urdf.xacro"/>
+  <xacro:include filename="$(find manipulator_description)/urdf/manipulator/manipulator_selector.urdf.xacro"/>
+  <xacro:include filename="$(find manipulator_description)/urdf/manipulator/manipulator_picker.urdf.xacro"/>
+
+  <!-- Main manipulator macro -->
+  <xacro:macro name="manipulator" params="config_file use_scara:=false">
+
+    <!--
+      Assembly hierarchy:
+        base_link (railway base)
+          - main_frame (moves on X-axis rail)
+              - selector_frame (moves on Z-axis)
+                  - left_container_jaw (Y-axis gripper)
+                  - right_container_jaw (Y-axis gripper, mirrored)
+                  - gripper (Y-axis movement)
+                  |   - left_gripper_magnet (fixed)
+                  |   - right_gripper_magnet (fixed)
+                  - picker_frame (Z-axis)
+                      - (optional) SCARA arm when use_scara:=true
+    -->
+
+    <!-- 1. BASE ASSEMBLY: Railway system -->
+    <xacro:base_assembly
+      parent_link="world"
+      config_file="${config_file}"/>
+
+    <!-- 2. SELECTOR ASSEMBLY: Container gripper (attaches to main_frame) -->
+    <xacro:selector_assembly
+      parent_link="main_frame"
+      config_file="${config_file}"/>
+
+    <!-- 3. PICKER ASSEMBLY: Box picker (attaches to selector_frame) -->
+    <xacro:picker_assembly
+      parent_link="selector_frame"
+      config_file="${config_file}"
+      use_scara="${use_scara}"/>
+
+  </xacro:macro>
+
+</robot>

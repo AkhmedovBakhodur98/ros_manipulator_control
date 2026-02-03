@@ -1,0 +1,229 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    Selector Assembly Xacro
+
+    Contains:
+      - selector_frame (vertical Z-axis frame)
+      - left_container_jaw + right_container_jaw (mirrored gripper jaws)
+
+    Parameters loaded from: config/manipulator_params.yaml
+  -->
+
+  <xacro:macro name="selector_assembly" params="parent_link config_file">
+
+    <!-- Load parameters from YAML -->
+    <xacro:property name="params" value="${xacro.load_yaml(config_file)}"/>
+    <xacro:property name="selector" value="${params['selector_assembly']}"/>
+
+    <!-- ================================================================ -->
+    <!-- SELECTOR FRAME (Vertical Z-axis moving frame) -->
+    <!-- ================================================================ -->
+    <link name="selector_frame">
+      <!-- Visual -->
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="file://$(find manipulator_description)/meshes/manipulator/${selector['selector_frame']['mesh']}"/>
+        </geometry>
+        <material name="selector_frame_color">
+          <color rgba="${selector['selector_frame']['color'][0]} ${selector['selector_frame']['color'][1]} ${selector['selector_frame']['color'][2]} ${selector['selector_frame']['color'][3]}"/>
+        </material>
+      </visual>
+
+      <!-- Collision -->
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="file://$(find manipulator_description)/meshes/manipulator/${selector['selector_frame']['mesh']}"/>
+        </geometry>
+      </collision>
+
+      <!-- Inertial -->
+      <inertial>
+        <origin
+          xyz="${selector['selector_frame']['inertial']['origin']['xyz'][0]}
+               ${selector['selector_frame']['inertial']['origin']['xyz'][1]}
+               ${selector['selector_frame']['inertial']['origin']['xyz'][2]}"
+          rpy="${selector['selector_frame']['inertial']['origin']['rpy'][0]}
+               ${selector['selector_frame']['inertial']['origin']['rpy'][1]}
+               ${selector['selector_frame']['inertial']['origin']['rpy'][2]}"/>
+        <mass value="${selector['selector_frame']['inertial']['mass']}"/>
+        <inertia
+          ixx="${selector['selector_frame']['inertial']['inertia']['ixx']}"
+          ixy="${selector['selector_frame']['inertial']['inertia']['ixy']}"
+          ixz="${selector['selector_frame']['inertial']['inertia']['ixz']}"
+          iyy="${selector['selector_frame']['inertial']['inertia']['iyy']}"
+          iyz="${selector['selector_frame']['inertial']['inertia']['iyz']}"
+          izz="${selector['selector_frame']['inertial']['inertia']['izz']}"/>
+      </inertial>
+    </link>
+
+    <!-- ================================================================ -->
+    <!-- JOINT: main_frame -> selector_frame (Z-axis vertical) -->
+    <!-- ================================================================ -->
+    <joint name="main_frame_selector_frame_joint" type="${selector['main_frame_selector_frame_joint']['type']}">
+      <origin
+        xyz="${selector['main_frame_selector_frame_joint']['origin']['xyz'][0]}
+             ${selector['main_frame_selector_frame_joint']['origin']['xyz'][1]}
+             ${selector['main_frame_selector_frame_joint']['origin']['xyz'][2]}"
+        rpy="${selector['main_frame_selector_frame_joint']['origin']['rpy'][0]}
+             ${selector['main_frame_selector_frame_joint']['origin']['rpy'][1]}
+             ${selector['main_frame_selector_frame_joint']['origin']['rpy'][2]}"/>
+      <parent link="${parent_link}"/>
+      <child link="selector_frame"/>
+      <axis xyz="${selector['main_frame_selector_frame_joint']['axis'][0]}
+                 ${selector['main_frame_selector_frame_joint']['axis'][1]}
+                 ${selector['main_frame_selector_frame_joint']['axis'][2]}"/>
+      <limit
+        lower="${selector['main_frame_selector_frame_joint']['limits']['lower']}"
+        upper="${selector['main_frame_selector_frame_joint']['limits']['upper']}"
+        effort="${selector['main_frame_selector_frame_joint']['limits']['effort']}"
+        velocity="${selector['main_frame_selector_frame_joint']['limits']['velocity']}"/>
+      <dynamics
+        damping="${selector['main_frame_selector_frame_joint']['dynamics']['damping']}"
+        friction="${selector['main_frame_selector_frame_joint']['dynamics']['friction']}"/>
+    </joint>
+
+    <!-- ================================================================ -->
+    <!-- LEFT CONTAINER JAW -->
+    <!-- ================================================================ -->
+    <link name="left_container_jaw">
+      <!-- Visual -->
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="file://$(find manipulator_description)/meshes/manipulator/${selector['left_container_jaw']['mesh']}"/>
+        </geometry>
+        <material name="left_container_jaw_color">
+          <color rgba="${selector['left_container_jaw']['color'][0]} ${selector['left_container_jaw']['color'][1]} ${selector['left_container_jaw']['color'][2]} ${selector['left_container_jaw']['color'][3]}"/>
+        </material>
+      </visual>
+
+      <!-- Collision -->
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="file://$(find manipulator_description)/meshes/manipulator/${selector['left_container_jaw']['mesh']}"/>
+        </geometry>
+      </collision>
+
+      <!-- Inertial -->
+      <inertial>
+        <origin
+          xyz="${selector['left_container_jaw']['inertial']['origin']['xyz'][0]}
+               ${selector['left_container_jaw']['inertial']['origin']['xyz'][1]}
+               ${selector['left_container_jaw']['inertial']['origin']['xyz'][2]}"
+          rpy="${selector['left_container_jaw']['inertial']['origin']['rpy'][0]}
+               ${selector['left_container_jaw']['inertial']['origin']['rpy'][1]}
+               ${selector['left_container_jaw']['inertial']['origin']['rpy'][2]}"/>
+        <mass value="${selector['left_container_jaw']['inertial']['mass']}"/>
+        <inertia
+          ixx="${selector['left_container_jaw']['inertial']['inertia']['ixx']}"
+          ixy="${selector['left_container_jaw']['inertial']['inertia']['ixy']}"
+          ixz="${selector['left_container_jaw']['inertial']['inertia']['ixz']}"
+          iyy="${selector['left_container_jaw']['inertial']['inertia']['iyy']}"
+          iyz="${selector['left_container_jaw']['inertial']['inertia']['iyz']}"
+          izz="${selector['left_container_jaw']['inertial']['inertia']['izz']}"/>
+      </inertial>
+    </link>
+
+    <!-- ================================================================ -->
+    <!-- JOINT: selector_frame -> left_container_jaw (Y-axis opening) -->
+    <!-- ================================================================ -->
+    <joint name="selector_left_container_jaw_joint" type="${selector['selector_left_container_jaw_joint']['type']}">
+      <origin
+        xyz="${selector['selector_left_container_jaw_joint']['origin']['xyz'][0]}
+             ${selector['selector_left_container_jaw_joint']['origin']['xyz'][1]}
+             ${selector['selector_left_container_jaw_joint']['origin']['xyz'][2]}"
+        rpy="${selector['selector_left_container_jaw_joint']['origin']['rpy'][0]}
+             ${selector['selector_left_container_jaw_joint']['origin']['rpy'][1]}
+             ${selector['selector_left_container_jaw_joint']['origin']['rpy'][2]}"/>
+      <parent link="selector_frame"/>
+      <child link="left_container_jaw"/>
+      <axis xyz="${selector['selector_left_container_jaw_joint']['axis'][0]}
+                 ${selector['selector_left_container_jaw_joint']['axis'][1]}
+                 ${selector['selector_left_container_jaw_joint']['axis'][2]}"/>
+      <limit
+        lower="${selector['selector_left_container_jaw_joint']['limits']['lower']}"
+        upper="${selector['selector_left_container_jaw_joint']['limits']['upper']}"
+        effort="${selector['selector_left_container_jaw_joint']['limits']['effort']}"
+        velocity="${selector['selector_left_container_jaw_joint']['limits']['velocity']}"/>
+      <dynamics
+        damping="${selector['selector_left_container_jaw_joint']['dynamics']['damping']}"
+        friction="${selector['selector_left_container_jaw_joint']['dynamics']['friction']}"/>
+    </joint>
+
+    <!-- ================================================================ -->
+    <!-- RIGHT CONTAINER JAW (Mirrored) -->
+    <!-- ================================================================ -->
+    <link name="right_container_jaw">
+      <!-- Visual -->
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="file://$(find manipulator_description)/meshes/manipulator/${selector['right_container_jaw']['mesh']}"/>
+        </geometry>
+        <material name="right_container_jaw_color">
+          <color rgba="${selector['right_container_jaw']['color'][0]} ${selector['right_container_jaw']['color'][1]} ${selector['right_container_jaw']['color'][2]} ${selector['right_container_jaw']['color'][3]}"/>
+        </material>
+      </visual>
+
+      <!-- Collision -->
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="file://$(find manipulator_description)/meshes/manipulator/${selector['right_container_jaw']['mesh']}"/>
+        </geometry>
+      </collision>
+
+      <!-- Inertial -->
+      <inertial>
+        <origin
+          xyz="${selector['right_container_jaw']['inertial']['origin']['xyz'][0]}
+               ${selector['right_container_jaw']['inertial']['origin']['xyz'][1]}
+               ${selector['right_container_jaw']['inertial']['origin']['xyz'][2]}"
+          rpy="${selector['right_container_jaw']['inertial']['origin']['rpy'][0]}
+               ${selector['right_container_jaw']['inertial']['origin']['rpy'][1]}
+               ${selector['right_container_jaw']['inertial']['origin']['rpy'][2]}"/>
+        <mass value="${selector['right_container_jaw']['inertial']['mass']}"/>
+        <inertia
+          ixx="${selector['right_container_jaw']['inertial']['inertia']['ixx']}"
+          ixy="${selector['right_container_jaw']['inertial']['inertia']['ixy']}"
+          ixz="${selector['right_container_jaw']['inertial']['inertia']['ixz']}"
+          iyy="${selector['right_container_jaw']['inertial']['inertia']['iyy']}"
+          iyz="${selector['right_container_jaw']['inertial']['inertia']['iyz']}"
+          izz="${selector['right_container_jaw']['inertial']['inertia']['izz']}"/>
+      </inertial>
+    </link>
+
+    <!-- ================================================================ -->
+    <!-- JOINT: selector_frame -> right_container_jaw -->
+    <!-- ================================================================ -->
+    <joint name="selector_right_container_jaw_joint" type="${selector['selector_right_container_jaw_joint']['type']}">
+      <origin
+        xyz="${selector['selector_right_container_jaw_joint']['origin']['xyz'][0]}
+             ${selector['selector_right_container_jaw_joint']['origin']['xyz'][1]}
+             ${selector['selector_right_container_jaw_joint']['origin']['xyz'][2]}"
+        rpy="${selector['selector_right_container_jaw_joint']['origin']['rpy'][0]}
+             ${selector['selector_right_container_jaw_joint']['origin']['rpy'][1]}
+             ${selector['selector_right_container_jaw_joint']['origin']['rpy'][2]}"/>
+      <parent link="selector_frame"/>
+      <child link="right_container_jaw"/>
+      <axis xyz="${selector['selector_right_container_jaw_joint']['axis'][0]}
+                 ${selector['selector_right_container_jaw_joint']['axis'][1]}
+                 ${selector['selector_right_container_jaw_joint']['axis'][2]}"/>
+      <limit
+        lower="${selector['selector_right_container_jaw_joint']['limits']['lower']}"
+        upper="${selector['selector_right_container_jaw_joint']['limits']['upper']}"
+        effort="${selector['selector_right_container_jaw_joint']['limits']['effort']}"
+        velocity="${selector['selector_right_container_jaw_joint']['limits']['velocity']}"/>
+      <dynamics
+        damping="${selector['selector_right_container_jaw_joint']['dynamics']['damping']}"
+        friction="${selector['selector_right_container_jaw_joint']['dynamics']['friction']}"/>
+    </joint>
+
+  </xacro:macro>
+
+</robot>

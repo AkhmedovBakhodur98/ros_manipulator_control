@@ -1,0 +1,100 @@
+# ros2_control controller configuration for manipulator
+#
+# Controllers:
+#   - joint_state_broadcaster: Publishes joint states to /joint_states
+#   - manipulator_controller: JointTrajectoryController for main 3 axes
+#   - gripper_controller: ForwardCommandController for container jaws (mirrored pair)
+#
+# Joints (5 total):
+#   Main axes: base_main_frame_joint, main_frame_selector_frame_joint, selector_frame_picker_frame_joint
+#   Gripper: selector_left_container_jaw_joint, selector_right_container_jaw_joint
+
+controller_manager:
+  ros__parameters:
+    update_rate: 100  # Hz
+
+    # Controller declarations
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    manipulator_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+    gripper_controller:
+      type: forward_command_controller/ForwardCommandController
+
+
+# Joint State Broadcaster
+# Publishes all joint states to /joint_states topic
+joint_state_broadcaster:
+  ros__parameters:
+    joints:
+      - base_main_frame_joint
+      - main_frame_selector_frame_joint
+      - selector_left_container_jaw_joint
+      - selector_right_container_jaw_joint
+      - selector_frame_picker_frame_joint
+
+
+# Manipulator Controller (JointTrajectoryController)
+# Controls main 3 axes with trajectory following
+#
+# Usage:
+#   ros2 action send_goal /manipulator_controller/follow_joint_trajectory \
+#     control_msgs/action/FollowJointTrajectory "{
+#       trajectory: {
+#         joint_names: [base_main_frame_joint, main_frame_selector_frame_joint, selector_frame_picker_frame_joint],
+#         points: [{positions: [1.0, 0.5, 0.1], time_from_start: {sec: 2}}]
+#       }
+#     }"
+manipulator_controller:
+  ros__parameters:
+    joints:
+      - base_main_frame_joint
+      - main_frame_selector_frame_joint
+      - selector_frame_picker_frame_joint
+
+    command_interfaces:
+      - position
+
+    state_interfaces:
+      - position
+      - velocity
+
+    state_publish_rate: 50.0  # Hz
+    action_monitor_rate: 20.0  # Hz
+
+    allow_partial_joints_goal: false
+    allow_integration_in_goal_trajectories: true
+    interpolation_method: splines
+
+    constraints:
+      stopped_velocity_tolerance: 0.01
+      goal_time: 0.0  # 0 means no timeout
+
+
+# Gripper Controller (ForwardCommandController)
+# Controls container jaws (both left and right)
+#
+# Both jaws are controlled together. For mirrored behavior (jaws move symmetrically),
+# send opposite values: left=+X, right=-X
+#
+# Usage:
+#   # Open gripper (jaws move apart)
+#   ros2 topic pub /gripper_controller/commands std_msgs/msg/Float64MultiArray \
+#     "{data: [0.1, -0.1]}"
+#
+#   # Close gripper (jaws move together)
+#   ros2 topic pub /gripper_controller/commands std_msgs/msg/Float64MultiArray \
+#     "{data: [0.0, 0.0]}"
+#
+#   # Set specific width (e.g., 0.15m between jaws)
+#   ros2 topic pub /gripper_controller/commands std_msgs/msg/Float64MultiArray \
+#     "{data: [0.075, -0.075]}"
+gripper_controller:
+  ros__parameters:
+    joints:
+      - selector_left_container_jaw_joint
+      - selector_right_container_jaw_joint
+
+    interface_name: position

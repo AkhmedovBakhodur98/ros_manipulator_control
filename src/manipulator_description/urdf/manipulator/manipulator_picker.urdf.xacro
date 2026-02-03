@@ -1,0 +1,107 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    Picker Assembly Xacro
+
+    Contains:
+      - picker_frame (vertical Z-axis frame for picker)
+      - (optional) SCARA arm when use_scara:=true
+
+    Parameters loaded from: config/manipulator_params.yaml
+
+    Usage:
+      Without SCARA: <xacro:picker_assembly parent_link="selector_frame" config_file="..." use_scara="false"/>
+      With SCARA:    <xacro:picker_assembly parent_link="selector_frame" config_file="..." use_scara="true"/>
+  -->
+
+  <!-- Include SCARA arm assembly from scara_description package (only used when use_scara is true) -->
+  <xacro:include filename="$(find scara_description)/urdf/scara_arm.urdf.xacro"/>
+
+  <xacro:macro name="picker_assembly" params="parent_link config_file use_scara:=false">
+
+    <!-- Load parameters from YAML -->
+    <xacro:property name="params" value="${xacro.load_yaml(config_file)}"/>
+    <xacro:property name="picker" value="${params['picker_assembly']}"/>
+
+    <!-- ================================================================ -->
+    <!-- PICKER FRAME (Vertical Z-axis frame) -->
+    <!-- ================================================================ -->
+    <link name="picker_frame">
+      <!-- Visual -->
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="file://$(find manipulator_description)/meshes/manipulator/${picker['picker_frame']['mesh']}"/>
+        </geometry>
+        <material name="picker_frame_color">
+          <color rgba="${picker['picker_frame']['color'][0]} ${picker['picker_frame']['color'][1]} ${picker['picker_frame']['color'][2]} ${picker['picker_frame']['color'][3]}"/>
+        </material>
+      </visual>
+
+      <!-- Collision -->
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="file://$(find manipulator_description)/meshes/manipulator/${picker['picker_frame']['mesh']}"/>
+        </geometry>
+      </collision>
+
+      <!-- Inertial -->
+      <inertial>
+        <origin
+          xyz="${picker['picker_frame']['inertial']['origin']['xyz'][0]}
+               ${picker['picker_frame']['inertial']['origin']['xyz'][1]}
+               ${picker['picker_frame']['inertial']['origin']['xyz'][2]}"
+          rpy="${picker['picker_frame']['inertial']['origin']['rpy'][0]}
+               ${picker['picker_frame']['inertial']['origin']['rpy'][1]}
+               ${picker['picker_frame']['inertial']['origin']['rpy'][2]}"/>
+        <mass value="${picker['picker_frame']['inertial']['mass']}"/>
+        <inertia
+          ixx="${picker['picker_frame']['inertial']['inertia']['ixx']}"
+          ixy="${picker['picker_frame']['inertial']['inertia']['ixy']}"
+          ixz="${picker['picker_frame']['inertial']['inertia']['ixz']}"
+          iyy="${picker['picker_frame']['inertial']['inertia']['iyy']}"
+          iyz="${picker['picker_frame']['inertial']['inertia']['iyz']}"
+          izz="${picker['picker_frame']['inertial']['inertia']['izz']}"/>
+      </inertial>
+    </link>
+
+    <!-- ================================================================ -->
+    <!-- JOINT: selector_frame -> picker_frame (Z-axis vertical) -->
+    <!-- ================================================================ -->
+    <joint name="selector_frame_picker_frame_joint" type="${picker['selector_frame_picker_frame_joint']['type']}">
+      <origin
+        xyz="${picker['selector_frame_picker_frame_joint']['origin']['xyz'][0]}
+             ${picker['selector_frame_picker_frame_joint']['origin']['xyz'][1]}
+             ${picker['selector_frame_picker_frame_joint']['origin']['xyz'][2]}"
+        rpy="${picker['selector_frame_picker_frame_joint']['origin']['rpy'][0]}
+             ${picker['selector_frame_picker_frame_joint']['origin']['rpy'][1]}
+             ${picker['selector_frame_picker_frame_joint']['origin']['rpy'][2]}"/>
+      <parent link="${parent_link}"/>
+      <child link="picker_frame"/>
+      <axis xyz="${picker['selector_frame_picker_frame_joint']['axis'][0]}
+                 ${picker['selector_frame_picker_frame_joint']['axis'][1]}
+                 ${picker['selector_frame_picker_frame_joint']['axis'][2]}"/>
+      <limit
+        lower="${picker['selector_frame_picker_frame_joint']['limits']['lower']}"
+        upper="${picker['selector_frame_picker_frame_joint']['limits']['upper']}"
+        effort="${picker['selector_frame_picker_frame_joint']['limits']['effort']}"
+        velocity="${picker['selector_frame_picker_frame_joint']['limits']['velocity']}"/>
+      <dynamics
+        damping="${picker['selector_frame_picker_frame_joint']['dynamics']['damping']}"
+        friction="${picker['selector_frame_picker_frame_joint']['dynamics']['friction']}"/>
+    </joint>
+
+    <!-- ================================================================ -->
+    <!-- OPTIONAL: SCARA ARM (Mounted to picker_frame when use_scara=true) -->
+    <!-- ================================================================ -->
+    <xacro:if value="${use_scara}">
+      <xacro:scara_arm
+        parent_link="picker_frame"
+        config_file="$(find scara_description)/config/scara_params.yaml"/>
+    </xacro:if>
+
+  </xacro:macro>
+
+</robot>

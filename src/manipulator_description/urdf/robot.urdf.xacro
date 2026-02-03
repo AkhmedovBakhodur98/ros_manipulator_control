@@ -1,0 +1,51 @@
+<?xml version="1.0"?>
+<robot name="manipulator_system" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    Top-level URDF for the robotic manipulator system (simplified)
+
+    This file assembles:
+    - Manipulator (base + selector + picker assemblies)
+    - Optional: SCARA arm attached to picker_frame
+
+    Usage:
+      xacro robot.urdf.xacro > robot.urdf
+      xacro robot.urdf.xacro use_scara:=true > robot_scara.urdf
+      ros2 launch manipulator_description display.launch.py
+      ros2 launch manipulator_description display.launch.py use_scara:=true
+  -->
+
+  <!-- Configuration arguments -->
+  <xacro:arg name="use_scara" default="false"/>
+  <xacro:arg name="use_ros2_control" default="true"/>
+
+  <!-- Load materials -->
+  <xacro:include filename="$(find manipulator_description)/urdf/materials.xacro"/>
+
+  <!-- Load manipulator -->
+  <xacro:include filename="$(find manipulator_description)/urdf/manipulator/manipulator.urdf.xacro"/>
+
+  <!-- Load ros2_control hardware interface -->
+  <xacro:include filename="$(find manipulator_description)/urdf/manipulator/manipulator_ros2_control.urdf.xacro"/>
+
+  <!-- World link (reference frame) -->
+  <link name="world"/>
+
+  <!-- Instantiate manipulator (creates base_link and entire manipulator tree) -->
+  <xacro:manipulator
+    config_file="$(find manipulator_description)/config/manipulator_params.yaml"
+    use_scara="$(arg use_scara)"/>
+
+  <!-- Fixed joint: world -> base_link -->
+  <joint name="world_to_base" type="fixed">
+    <parent link="world"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 0.09" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ros2_control hardware interface (conditional) -->
+  <xacro:if value="$(arg use_ros2_control)">
+    <xacro:manipulator_ros2_control/>
+  </xacro:if>
+
+</robot>

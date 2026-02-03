@@ -1,0 +1,135 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    Base Assembly Xacro
+
+    Contains:
+      - base_link (railway base)
+      - main_frame (railway carriage - moves along X-axis)
+      - base_main_frame_joint (prismatic X-axis)
+
+    Parameters loaded from: config/manipulator_params.yaml
+  -->
+
+  <xacro:macro name="base_assembly" params="parent_link config_file">
+
+    <!-- Load parameters from YAML -->
+    <xacro:property name="params" value="${xacro.load_yaml(config_file)}"/>
+    <xacro:property name="base" value="${params['base_assembly']}"/>
+
+    <!-- ================================================================ -->
+    <!-- BASE LINK (Railway base) -->
+    <!-- ================================================================ -->
+    <link name="base_link">
+      <!-- Visual -->
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="file://$(find manipulator_description)/meshes/manipulator/${base['base_link']['mesh']}"/>
+        </geometry>
+        <material name="base_link_color">
+          <color rgba="${base['base_link']['color'][0]} ${base['base_link']['color'][1]} ${base['base_link']['color'][2]} ${base['base_link']['color'][3]}"/>
+        </material>
+      </visual>
+
+      <!-- Collision -->
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="file://$(find manipulator_description)/meshes/manipulator/${base['base_link']['mesh']}"/>
+        </geometry>
+      </collision>
+
+      <!-- Inertial -->
+      <inertial>
+        <origin
+          xyz="${base['base_link']['inertial']['origin']['xyz'][0]}
+               ${base['base_link']['inertial']['origin']['xyz'][1]}
+               ${base['base_link']['inertial']['origin']['xyz'][2]}"
+          rpy="${base['base_link']['inertial']['origin']['rpy'][0]}
+               ${base['base_link']['inertial']['origin']['rpy'][1]}
+               ${base['base_link']['inertial']['origin']['rpy'][2]}"/>
+        <mass value="${base['base_link']['inertial']['mass']}"/>
+        <inertia
+          ixx="${base['base_link']['inertial']['inertia']['ixx']}"
+          ixy="${base['base_link']['inertial']['inertia']['ixy']}"
+          ixz="${base['base_link']['inertial']['inertia']['ixz']}"
+          iyy="${base['base_link']['inertial']['inertia']['iyy']}"
+          iyz="${base['base_link']['inertial']['inertia']['iyz']}"
+          izz="${base['base_link']['inertial']['inertia']['izz']}"/>
+      </inertial>
+    </link>
+
+    <!-- ================================================================ -->
+    <!-- MAIN FRAME (Railway carriage) -->
+    <!-- ================================================================ -->
+    <link name="main_frame">
+      <!-- Visual -->
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="file://$(find manipulator_description)/meshes/manipulator/${base['main_frame']['mesh']}"/>
+        </geometry>
+        <material name="main_frame_color">
+          <color rgba="${base['main_frame']['color'][0]} ${base['main_frame']['color'][1]} ${base['main_frame']['color'][2]} ${base['main_frame']['color'][3]}"/>
+        </material>
+      </visual>
+
+      <!-- Collision -->
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="file://$(find manipulator_description)/meshes/manipulator/${base['main_frame']['mesh']}"/>
+        </geometry>
+      </collision>
+
+      <!-- Inertial -->
+      <inertial>
+        <origin
+          xyz="${base['main_frame']['inertial']['origin']['xyz'][0]}
+               ${base['main_frame']['inertial']['origin']['xyz'][1]}
+               ${base['main_frame']['inertial']['origin']['xyz'][2]}"
+          rpy="${base['main_frame']['inertial']['origin']['rpy'][0]}
+               ${base['main_frame']['inertial']['origin']['rpy'][1]}
+               ${base['main_frame']['inertial']['origin']['rpy'][2]}"/>
+        <mass value="${base['main_frame']['inertial']['mass']}"/>
+        <inertia
+          ixx="${base['main_frame']['inertial']['inertia']['ixx']}"
+          ixy="${base['main_frame']['inertial']['inertia']['ixy']}"
+          ixz="${base['main_frame']['inertial']['inertia']['ixz']}"
+          iyy="${base['main_frame']['inertial']['inertia']['iyy']}"
+          iyz="${base['main_frame']['inertial']['inertia']['iyz']}"
+          izz="${base['main_frame']['inertial']['inertia']['izz']}"/>
+      </inertial>
+    </link>
+
+    <!-- ================================================================ -->
+    <!-- JOINT: base_link -> main_frame (X-axis prismatic rail) -->
+    <!-- ================================================================ -->
+    <joint name="base_main_frame_joint" type="${base['base_main_frame_joint']['type']}">
+      <origin
+        xyz="${base['base_main_frame_joint']['origin']['xyz'][0]}
+             ${base['base_main_frame_joint']['origin']['xyz'][1]}
+             ${base['base_main_frame_joint']['origin']['xyz'][2]}"
+        rpy="${base['base_main_frame_joint']['origin']['rpy'][0]}
+             ${base['base_main_frame_joint']['origin']['rpy'][1]}
+             ${base['base_main_frame_joint']['origin']['rpy'][2]}"/>
+      <parent link="base_link"/>
+      <child link="main_frame"/>
+      <axis xyz="${base['base_main_frame_joint']['axis'][0]}
+                 ${base['base_main_frame_joint']['axis'][1]}
+                 ${base['base_main_frame_joint']['axis'][2]}"/>
+      <limit
+        lower="${base['base_main_frame_joint']['limits']['lower']}"
+        upper="${base['base_main_frame_joint']['limits']['upper']}"
+        effort="${base['base_main_frame_joint']['limits']['effort']}"
+        velocity="${base['base_main_frame_joint']['limits']['velocity']}"/>
+      <dynamics
+        damping="${base['base_main_frame_joint']['dynamics']['damping']}"
+        friction="${base['base_main_frame_joint']['dynamics']['friction']}"/>
+    </joint>
+
+  </xacro:macro>
+
+</robot>

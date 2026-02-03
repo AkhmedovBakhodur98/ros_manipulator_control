@@ -1,0 +1,110 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    ros2_control hardware interface definition for manipulator
+
+    This macro defines the hardware interface for all manipulator joints.
+    Uses mock_components/GenericSystem for testing without real hardware.
+
+    Joints controlled (5 total):
+      Main axes (3):
+        - base_main_frame_joint (X rail)
+        - main_frame_selector_frame_joint (Z lift)
+        - selector_frame_picker_frame_joint (Z picker)
+
+      Gripper jaws (2):
+        - selector_left_container_jaw_joint (Y-axis, primary)
+        - selector_right_container_jaw_joint (Y-axis, mirrored)
+  -->
+
+  <xacro:macro name="manipulator_ros2_control">
+
+    <ros2_control name="manipulator_hardware" type="system">
+
+      <!-- Hardware interface plugin -->
+      <!-- For testing: mock_components/GenericSystem -->
+      <!-- For real hardware: replace with your hardware interface plugin -->
+      <hardware>
+        <plugin>mock_components/GenericSystem</plugin>
+        <param name="mock_sensor_commands">true</param>
+        <param name="state_following_offset">0.0</param>
+      </hardware>
+
+      <!-- ============================================ -->
+      <!-- BASE ASSEMBLY JOINTS -->
+      <!-- ============================================ -->
+
+      <!-- Base to Main Frame: X-axis rail movement -->
+      <joint name="base_main_frame_joint">
+        <command_interface name="position">
+          <param name="min">0.0</param>
+          <param name="max">4.0</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+
+      <!-- ============================================ -->
+      <!-- SELECTOR ASSEMBLY JOINTS -->
+      <!-- ============================================ -->
+
+      <!-- Main Frame to Selector Frame: Z-axis vertical lift -->
+      <joint name="main_frame_selector_frame_joint">
+        <command_interface name="position">
+          <param name="min">-0.01</param>
+          <param name="max">1.5</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+
+      <!-- Left Container Jaw: -Y axis (primary jaw for gripper) -->
+      <joint name="selector_left_container_jaw_joint">
+        <command_interface name="position">
+          <param name="min">-0.2</param>
+          <param name="max">0.2</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+
+      <!-- Right Container Jaw: +Y axis (mirrored jaw) -->
+      <joint name="selector_right_container_jaw_joint">
+        <command_interface name="position">
+          <param name="min">-0.2</param>
+          <param name="max">0.2</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+
+      <!-- ============================================ -->
+      <!-- PICKER ASSEMBLY JOINTS -->
+      <!-- ============================================ -->
+
+      <!-- Selector Frame to Picker Frame: Z-axis -->
+      <joint name="selector_frame_picker_frame_joint">
+        <command_interface name="position">
+          <param name="min">-0.01</param>
+          <param name="max">0.3</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+
+    </ros2_control>
+
+  </xacro:macro>
+
+</robot>
