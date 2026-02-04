@@ -1,0 +1,80 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    ros2_control hardware interface definition for SCARA arm
+
+    This macro defines the hardware interface for all SCARA joints.
+    Uses mock_components/GenericSystem for testing without real hardware.
+
+    Joints controlled (3):
+      - scara_shoulder_joint (theta1): Base rotation (Z-axis, ±57°)
+      - scara_elbow_joint (theta2): Arm reach (Z-axis, ±185°)
+      - scara_wrist_joint (theta3): End-effector rotation (Z-axis, ±360°)
+
+    Parameters loaded from: config/scara_params.yaml
+  -->
+
+  <xacro:macro name="scara_ros2_control" params="config_file">
+
+    <!-- Load parameters from YAML -->
+    <xacro:property name="params" value="${xacro.load_yaml(config_file)}"/>
+    <xacro:property name="joints" value="${params['joints']}"/>
+
+    <ros2_control name="scara_hardware" type="system">
+
+      <!-- Hardware interface plugin -->
+      <!-- For testing: mock_components/GenericSystem -->
+      <!-- For real hardware: replace with your hardware interface plugin -->
+      <hardware>
+        <plugin>mock_components/GenericSystem</plugin>
+        <param name="mock_sensor_commands">true</param>
+        <param name="state_following_offset">0.0</param>
+      </hardware>
+
+      <!-- ============================================ -->
+      <!-- SCARA JOINTS -->
+      <!-- ============================================ -->
+
+      <!-- Shoulder Joint (theta1 - base rotation) -->
+      <joint name="scara_shoulder_joint">
+        <command_interface name="position">
+          <param name="min">${joints['scara_shoulder_joint']['limits']['lower']}</param>
+          <param name="max">${joints['scara_shoulder_joint']['limits']['upper']}</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+
+      <!-- Elbow Joint (theta2 - arm reach) -->
+      <joint name="scara_elbow_joint">
+        <command_interface name="position">
+          <param name="min">${joints['scara_elbow_joint']['limits']['lower']}</param>
+          <param name="max">${joints['scara_elbow_joint']['limits']['upper']}</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+
+      <!-- Wrist Joint (theta3 - end-effector orientation) -->
+      <joint name="scara_wrist_joint">
+        <command_interface name="position">
+          <param name="min">${joints['scara_wrist_joint']['limits']['lower']}</param>
+          <param name="max">${joints['scara_wrist_joint']['limits']['upper']}</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+
+    </ros2_control>
+
+  </xacro:macro>
+
+</robot>
+

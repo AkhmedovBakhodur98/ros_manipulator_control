@@ -9,10 +9,17 @@
 
     Usage:
       ros2 launch scara_description display.launch.py
+      ros2 launch scara_description scara_control.launch.py
   -->
+
+  <!-- Configuration arguments -->
+  <xacro:arg name="use_ros2_control" default="false"/>
 
   <!-- Include SCARA arm macro -->
   <xacro:include filename="$(find scara_description)/urdf/scara_arm.urdf.xacro"/>
+
+  <!-- Load ros2_control hardware interface -->
+  <xacro:include filename="$(find scara_description)/urdf/scara_ros2_control.urdf.xacro"/>
 
   <!-- World link (reference frame) -->
   <link name="world"/>
@@ -52,5 +59,11 @@
   <xacro:scara_arm
     parent_link="base_mount"
     config_file="$(find scara_description)/config/scara_params.yaml"/>
+
+  <!-- ros2_control hardware interface (conditional) -->
+  <xacro:if value="$(arg use_ros2_control)">
+    <xacro:scara_ros2_control
+      config_file="$(find scara_description)/config/scara_params.yaml"/>
+  </xacro:if>
 
 </robot>

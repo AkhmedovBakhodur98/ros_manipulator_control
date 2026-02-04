@@ -34,7 +34,8 @@ Controls where the SCARA attaches to its parent link.
 ```yaml
 mount:
   offset:
-    xyz: [0, 0, 0.15]       # Position offset [x, y, z] in meters
+    xyz: [0.15, 0, 0.15]    # Position offset [x, y, z] in meters
+                            # X: 15cm forward, Y: 0, Z: 15cm up
     rpy: [0, 0, 0]          # Rotation offset [roll, pitch, yaw] in radians
 ```
 
@@ -61,8 +62,9 @@ Parent Link Frame:
 | xyz Value | Effect | Use Case |
 |-----------|--------|----------|
 | `[0, 0, 0]` | SCARA at parent origin | Direct mount |
-| `[0, 0, 0.15]` | 150mm above parent | Default - clearance |
-| `[0.1, 0, 0]` | 100mm forward | Offset mount |
+| `[0, 0, 0.15]` | 150mm above parent | Vertical clearance |
+| `[0.15, 0, 0.15]` | 150mm forward + 150mm up | Default - forward offset |
+| `[0.1, 0, 0]` | 100mm forward | Forward offset only |
 | `[0, 0.2, 0.1]` | Sideways + up | Asymmetric mount |
 
 ### Rotation Offset (rpy)

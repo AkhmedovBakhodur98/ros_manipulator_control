@@ -11,9 +11,11 @@ src/scara_description/
 ├── CMakeLists.txt                    # Build configuration
 ├── package.xml                       # Package metadata and dependencies
 ├── config/
-│   └── scara_params.yaml             # All SCARA parameters (configurable)
+│   ├── scara_params.yaml             # All SCARA parameters (configurable)
+│   └── scara_controllers.yaml       # ros2_control controller configuration
 ├── launch/
-│   └── display.launch.py             # Standalone RViz visualization
+│   ├── display.launch.py             # Standalone RViz visualization
+│   └── scara_control.launch.py       # Standalone ros2_control launch
 ├── meshes/
 │   └── scara/
 │       ├── scara_base_link.STL       # Mounting bracket mesh
@@ -22,9 +24,10 @@ src/scara_description/
 │       ├── scara_flange_link.STL     # Wrist/flange mesh
 │       └── tool_body_link.STL        # Tool body mesh
 ├── rviz/
-│   └── (optional RViz config)
+│   └── scara_control.rviz            # RViz config for ros2_control (fixed frame: world)
 └── urdf/
     ├── scara_arm.urdf.xacro          # Main SCARA macro (reusable)
+    ├── scara_ros2_control.urdf.xacro # ros2_control hardware interface
     └── robot.urdf.xacro              # Standalone robot for testing
 ```
 
@@ -46,6 +49,7 @@ ROS2 package manifest defining:
 - Dependencies:
   - Build: `ament_cmake`
   - Runtime: `urdf`, `xacro`, `robot_state_publisher`, `joint_state_publisher_gui`, `rviz2`
+  - Runtime: `controller_manager`, `joint_state_broadcaster`, `joint_trajectory_controller`
 
 ---
 
@@ -123,6 +127,33 @@ ros2 launch scara_description display.launch.py
 ros2 launch scara_description display.launch.py gui:=false
 ```
 
+#### `launch/scara_control.launch.py`
+Python launch file for SCARA with ros2_control support.
+
+**Nodes launched:**
+1. `robot_state_publisher` - Publishes robot transforms
+2. `controller_manager` - Manages ros2_control controllers
+3. `joint_state_broadcaster` - Publishes joint states
+4. `scara_controller` - JointTrajectoryController for SCARA
+5. `rviz2` - 3D visualization (optional)
+
+**Launch arguments:**
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `use_sim_time` | `false` | Use simulation clock |
+| `rviz` | `true` | Launch RViz2 |
+
+**Usage:**
+```bash
+# Launch with ros2_control
+ros2 launch scara_description scara_control.launch.py
+
+# Without RViz
+ros2 launch scara_description scara_control.launch.py rviz:=false
+```
+
+**See:** [ros2_control.md](ros2_control.md) for detailed usage.
+
 ---
 
 ### Mesh Files
@@ -164,6 +195,21 @@ STL mesh files for robot visualization and collision detection.
 | `parent_link` | Yes | Name of the link to attach SCARA to |
 | `config_file` | Yes | Path to scara_params.yaml |
 
+#### `urdf/scara_ros2_control.urdf.xacro`
+**ros2_control hardware interface** for SCARA joints.
+
+Defines:
+- Hardware plugin (mock_components/GenericSystem by default)
+- Joint command/state interfaces for all 3 SCARA joints
+- Joint limits loaded from config file
+
+**Macro:** `scara_ros2_control`
+
+**Parameters:**
+- `config_file` - Path to scara_params.yaml
+
+**See:** [ros2_control.md](ros2_control.md) for details.
+
 #### `urdf/robot.urdf.xacro`
 **Standalone robot file** for testing SCARA independently.
 
@@ -171,6 +217,10 @@ Creates:
 - `world` link (reference frame)
 - `base_mount` link (simple pedestal)
 - SCARA arm attached to pedestal
+- Optional ros2_control hardware interface (when `use_ros2_control:=true`)
+
+**Arguments:**
+- `use_ros2_control` (default: `false`) - Enable ros2_control
 
 ---
 
@@ -285,6 +335,14 @@ check_urdf scara.urdf
 ## Integration with Other Robots
 
 See [integration.md](integration.md) for detailed instructions on how to attach the SCARA arm to other robots.
+
+## ros2_control Integration
+
+See [ros2_control.md](ros2_control.md) for complete documentation on:
+- Hardware interface setup
+- Controller configuration
+- Trajectory control
+- Integration with manipulator_description
 
 **Quick example:**
 ```xml

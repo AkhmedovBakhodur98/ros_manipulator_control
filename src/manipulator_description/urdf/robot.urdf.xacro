@@ -27,6 +27,9 @@
 
   <!-- Load ros2_control hardware interface -->
   <xacro:include filename="$(find manipulator_description)/urdf/manipulator/manipulator_ros2_control.urdf.xacro"/>
+  
+  <!-- Load SCARA ros2_control hardware interface (when SCARA is used) -->
+  <xacro:include filename="$(find scara_description)/urdf/scara_ros2_control.urdf.xacro"/>
 
   <!-- World link (reference frame) -->
   <link name="world"/>
@@ -45,7 +48,13 @@
 
   <!-- ros2_control hardware interface (conditional) -->
   <xacro:if value="$(arg use_ros2_control)">
-    <xacro:manipulator_ros2_control/>
+    <xacro:manipulator_ros2_control use_scara="$(arg use_scara)"/>
+    
+    <!-- SCARA ros2_control (only when SCARA is enabled) -->
+    <xacro:if value="$(arg use_scara)">
+      <xacro:scara_ros2_control
+        config_file="$(find scara_description)/config/scara_params.yaml"/>
+    </xacro:if>
   </xacro:if>
 
 </robot>

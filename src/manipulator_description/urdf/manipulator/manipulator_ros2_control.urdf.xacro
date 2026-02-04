@@ -7,7 +7,7 @@
     This macro defines the hardware interface for all manipulator joints.
     Uses mock_components/GenericSystem for testing without real hardware.
 
-    Joints controlled (5 total):
+    Joints controlled (5 base + 3 optional SCARA):
       Main axes (3):
         - base_main_frame_joint (X rail)
         - main_frame_selector_frame_joint (Z lift)
@@ -16,9 +16,14 @@
       Gripper jaws (2):
         - selector_left_container_jaw_joint (Y-axis, primary)
         - selector_right_container_jaw_joint (Y-axis, mirrored)
+
+      SCARA joints (3, optional):
+        - scara_shoulder_joint (Z-axis rotation)
+        - scara_elbow_joint (Z-axis rotation)
+        - scara_wrist_joint (Z-axis rotation)
   -->
 
-  <xacro:macro name="manipulator_ros2_control">
+  <xacro:macro name="manipulator_ros2_control" params="use_scara:=false">
 
     <ros2_control name="manipulator_hardware" type="system">
 

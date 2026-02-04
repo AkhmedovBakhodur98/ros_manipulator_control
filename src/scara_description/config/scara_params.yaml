@@ -7,7 +7,7 @@
 mount:
   # Offset from parent link to scara_base_link
   offset:
-    xyz: [0, 0, 0.15]       # X, Y, Z offset [meters]
+    xyz: [0.15, 0, 0.15]    # X, Y, Z offset [meters] - X: 15cm forward
     rpy: [0, 0, 0]          # Roll, Pitch, Yaw [radians]
 
 # ============================================================================

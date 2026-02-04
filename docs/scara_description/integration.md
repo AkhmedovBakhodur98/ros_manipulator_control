@@ -273,13 +273,26 @@ Parent Link Frame
 
 ## Integration with manipulator_description
 
-The `manipulator_description` package already has SCARA integration built-in.
+The `manipulator_description` package already has SCARA integration built-in, including ros2_control support.
 
-### Enable SCARA
+### Enable SCARA (Visualization Only)
 
 ```bash
 ros2 launch manipulator_description display.launch.py use_scara:=true
 ```
+
+### Enable SCARA with ros2_control
+
+```bash
+ros2 launch manipulator_description manipulator_control.launch.py use_scara:=true rviz:=true
+```
+
+This launches:
+- Manipulator with SCARA arm attached
+- All controllers (manipulator, gripper, SCARA)
+- RViz visualization
+
+**See:** [ros2_control.md](ros2_control.md) for detailed control instructions.
 
 ### How It Works
 

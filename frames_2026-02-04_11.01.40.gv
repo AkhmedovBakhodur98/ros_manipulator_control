@@ -1,0 +1,15 @@
+digraph G {
+"base_link" -> "main_frame"[label=" Broadcaster: default_authority\nAverage rate: 18.072\nBuffer length: 4.98\nMost recent transform: 1770192100.334059\nOldest transform: 1770192095.354076\n"];
+"world" -> "base_link"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"main_frame" -> "selector_frame"[label=" Broadcaster: default_authority\nAverage rate: 18.072\nBuffer length: 4.98\nMost recent transform: 1770192100.334059\nOldest transform: 1770192095.354076\n"];
+"selector_frame" -> "picker_frame"[label=" Broadcaster: default_authority\nAverage rate: 18.072\nBuffer length: 4.98\nMost recent transform: 1770192100.334059\nOldest transform: 1770192095.354076\n"];
+"selector_frame" -> "left_container_jaw"[label=" Broadcaster: default_authority\nAverage rate: 18.072\nBuffer length: 4.98\nMost recent transform: 1770192100.334059\nOldest transform: 1770192095.354076\n"];
+"selector_frame" -> "right_container_jaw"[label=" Broadcaster: default_authority\nAverage rate: 18.072\nBuffer length: 4.98\nMost recent transform: 1770192100.334059\nOldest transform: 1770192095.354076\n"];
+"picker_frame" -> "scara_base_link"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"scara_flange_link" -> "tool_body_link"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"tool_body_link" -> "tcp_link"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+edge [style=invis];
+ subgraph cluster_legend { style=bold; color=black; label ="view_frames Result";
+"Recorded at time: 1770192100.3410258"[ shape=plaintext ] ;
+}->"scara_flange_link";
+}

@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
 """
-Launch file for manipulator ros2_control
+Launch file for SCARA arm ros2_control
 
 This launch file:
 - Processes the xacro file with ros2_control enabled
 - Starts robot_state_publisher
 - Starts ros2_control controller_manager
 - Spawns joint_state_broadcaster
-- Spawns manipulator_controller (JointTrajectoryController)
-- Spawns gripper_controller (ForwardCommandController)
+- Spawns scara_controller (JointTrajectoryController)
 - Optionally launches RViz2
 
 Usage:
-    ros2 launch manipulator_description manipulator_control.launch.py
-    ros2 launch manipulator_description manipulator_control.launch.py rviz:=true
+    ros2 launch scara_description scara_control.launch.py
+    ros2 launch scara_description scara_control.launch.py rviz:=true
 """
 
 from launch import LaunchDescription
@@ -29,19 +28,16 @@ from launch_ros.parameter_descriptions import ParameterValue
 def generate_launch_description():
 
     # Package directories
-    pkg_share = FindPackageShare('manipulator_description')
-    scara_pkg_share = FindPackageShare('scara_description')
+    pkg_share = FindPackageShare('scara_description')
 
     # Paths
     urdf_file = PathJoinSubstitution([pkg_share, 'urdf', 'robot.urdf.xacro'])
-    controllers_file = PathJoinSubstitution([pkg_share, 'config', 'manipulator_controllers.yaml'])
-    scara_controllers_file = PathJoinSubstitution([scara_pkg_share, 'config', 'scara_controllers.yaml'])
-    rviz_config_file = PathJoinSubstitution([pkg_share, 'rviz', 'view_robot.rviz'])
+    controllers_file = PathJoinSubstitution([pkg_share, 'config', 'scara_controllers.yaml'])
+    rviz_config_file = PathJoinSubstitution([pkg_share, 'rviz', 'scara_control.rviz'])
 
     # Launch arguments
     use_sim_time = LaunchConfiguration('use_sim_time')
     use_rviz = LaunchConfiguration('rviz')
-    use_scara = LaunchConfiguration('use_scara')
 
     # Declare arguments
     declare_use_sim_time = DeclareLaunchArgument(
@@ -56,17 +52,10 @@ def generate_launch_description():
         description='Launch RViz2 if true'
     )
 
-    declare_use_scara = DeclareLaunchArgument(
-        'use_scara',
-        default_value='false',
-        description='Attach SCARA arm to picker_frame if true'
-    )
-
     # Process xacro file with ros2_control enabled
     robot_description_content = ParameterValue(
         Command([
             'xacro ', urdf_file,
-            ' use_scara:=', use_scara,
             ' use_ros2_control:=true'
         ]),
         value_type=str
@@ -85,15 +74,12 @@ def generate_launch_description():
     )
 
     # ros2_control controller manager
-    # Note: SCARA controllers file is included - if SCARA isn't enabled,
-    # the controller won't be spawned, so it's safe
     controller_manager_node = Node(
         package='controller_manager',
         executable='ros2_control_node',
         parameters=[
             {'robot_description': robot_description_content},
-            controllers_file,
-            scara_controllers_file
+            controllers_file
         ],
         output='screen'
     )
@@ -106,45 +92,12 @@ def generate_launch_description():
         output='screen'
     )
 
-    # Spawn manipulator_controller (after joint_state_broadcaster)
-    spawn_manipulator_controller = Node(
-        package='controller_manager',
-        executable='spawner',
-        arguments=['manipulator_controller', '--controller-manager', '/controller_manager'],
-        output='screen'
-    )
-
-    # Spawn gripper_controller (after joint_state_broadcaster)
-    spawn_gripper_controller = Node(
-        package='controller_manager',
-        executable='spawner',
-        arguments=['gripper_controller', '--controller-manager', '/controller_manager'],
-        output='screen'
-    )
-
-    # Event handler: spawn manipulator_controller after joint_state_broadcaster is active
-    delayed_manipulator_controller = RegisterEventHandler(
-        event_handler=OnProcessExit(
-            target_action=spawn_joint_state_broadcaster,
-            on_exit=[spawn_manipulator_controller]
-        )
-    )
-
-    # Event handler: spawn gripper_controller after joint_state_broadcaster is active
-    delayed_gripper_controller = RegisterEventHandler(
-        event_handler=OnProcessExit(
-            target_action=spawn_joint_state_broadcaster,
-            on_exit=[spawn_gripper_controller]
-        )
-    )
-
-    # Spawn scara_controller (only when SCARA is enabled, after joint_state_broadcaster)
+    # Spawn scara_controller (after joint_state_broadcaster)
     spawn_scara_controller = Node(
         package='controller_manager',
         executable='spawner',
         arguments=['scara_controller', '--controller-manager', '/controller_manager'],
-        output='screen',
-        condition=IfCondition(use_scara)
+        output='screen'
     )
 
     # Event handler: spawn scara_controller after joint_state_broadcaster is active
@@ -170,13 +123,11 @@ def generate_launch_description():
         # Arguments
         declare_use_sim_time,
         declare_rviz,
-        declare_use_scara,
         # Nodes
         robot_state_publisher_node,
         controller_manager_node,
         spawn_joint_state_broadcaster,
-        delayed_manipulator_controller,
-        delayed_gripper_controller,
         delayed_scara_controller,
         rviz_node
     ])
+
