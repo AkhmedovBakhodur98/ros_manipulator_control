@@ -76,21 +76,25 @@ manipulator_controller:
 # Gripper Controller (ForwardCommandController)
 # Controls container jaws (both left and right)
 #
-# Both jaws are controlled together. For mirrored behavior (jaws move symmetrically),
-# send opposite values: left=+X, right=-X
+# Jaw Logic:
+#   - Both jaws receive the SAME position value
+#   - URDF axes are opposite: left=[0,-1,0], right=[0,1,0]
+#   - Same value -> jaws move in opposite directions (symmetric)
+#   - 0.0 = jaws apart (OPEN)
+#   - positive value = jaws together (CLOSED)
 #
 # Usage:
-#   # Open gripper (jaws move apart)
-#   ros2 topic pub /gripper_controller/commands std_msgs/msg/Float64MultiArray \
-#     "{data: [0.1, -0.1]}"
-#
-#   # Close gripper (jaws move together)
+#   # Open gripper (jaws apart)
 #   ros2 topic pub /gripper_controller/commands std_msgs/msg/Float64MultiArray \
 #     "{data: [0.0, 0.0]}"
 #
-#   # Set specific width (e.g., 0.15m between jaws)
+#   # Close gripper (jaws together by 5cm)
 #   ros2 topic pub /gripper_controller/commands std_msgs/msg/Float64MultiArray \
-#     "{data: [0.075, -0.075]}"
+#     "{data: [0.05, 0.05]}"
+#
+# Recommended: Use gripper_service for simple open/close:
+#   ros2 service call /gripper/open std_srvs/srv/Trigger
+#   ros2 service call /gripper/close std_srvs/srv/Trigger
 gripper_controller:
   ros__parameters:
     joints:

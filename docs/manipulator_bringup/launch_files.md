@@ -15,6 +15,7 @@ The main launch file that starts all infrastructure:
 - ros2_control controller manager
 - All controllers (manipulator, gripper, optional SCARA)
 - Unified control interface (`move_joint_group_server`)
+- Gripper service (`gripper_service`) for simple open/close control
 - Optional RViz2 visualization
 
 **Most Common Usage:** Launch with `use_scara:=true` to enable the full system including the SCARA arm. This is the recommended configuration for typical operations.
@@ -113,8 +114,12 @@ ros2 launch manipulator_bringup manipulator_bringup.launch.py rviz:=false
    ├─► Waits for manipulator_controller to be spawned
    └─► Pass controller_joints parameter
 
-9. Start RViz2 (if rviz:=true)
-   └─► Loads pre-configured RViz config
+9. Start gripper_service (after gripper_controller)
+   ├─► Waits for gripper_controller to be spawned
+   └─► Provides /gripper/open and /gripper/close services
+
+10. Start RViz2 (if rviz:=true)
+    └─► Loads pre-configured RViz config
 ```
 
 ---
@@ -443,7 +448,60 @@ controller_joints_json = json.dumps(controller_joints)
 
 ---
 
-### 8. rviz2 (Conditional)
+### 8. gripper_service
+
+**Package:** `ros_control`
+**Executable:** `gripper_service.py`
+**Purpose:** Simple binary open/close control for gripper jaws
+
+**Spawned:** After `gripper_controller` (via event handler)
+
+**Why Delayed Startup:**
+- Requires `gripper_controller` to be active
+- Publishes to `/gripper_controller/commands` topic
+
+**Parameters:**
+- `use_sim_time` - Use simulation clock
+- `gripper_config.yaml` - Gripper configuration (home_position, open_offset)
+
+**Node Creation:**
+Uses `OpaqueFunction` similar to `move_joint_group_server`:
+
+```python
+def create_gripper_service(context):
+    config_file = str(gripper_config_file.perform(context))
+    node = Node(
+        package='ros_control',
+        executable='gripper_service.py',
+        name='gripper_service',
+        parameters=[
+            {'use_sim_time': use_sim_time_val},
+            config_file
+        ]
+    )
+    return [node]
+```
+
+**Services:**
+- `/gripper/open` - Open gripper (jaws apart)
+- `/gripper/close` - Close gripper (jaws together)
+
+**Topics Published:**
+- `/gripper_controller/commands` - Position commands `[left, right]`
+
+**Configuration:**
+```yaml
+gripper_service:
+  ros__parameters:
+    home_position: 0.0      # Open position (jaws apart)
+    open_offset: 0.05       # Closing distance (5cm)
+```
+
+**See Also:** [gripper_service.md](../ros_control/gripper_service.md)
+
+---
+
+### 9. rviz2 (Conditional)
 
 **Package:** `rviz2`  
 **Executable:** `rviz2`  
@@ -479,6 +537,11 @@ Controllers and services must be started in a specific order:
    - **Delayed startup:** Waits for `manipulator_controller` to be spawned
    - This ensures controllers are active when initial discovery runs
 
+4. **gripper_service** (after gripper_controller)
+   - Needs `gripper_controller` to be active
+   - **Delayed startup:** Waits for `gripper_controller` to be spawned
+   - Provides simple open/close services
+
 ### Event Handlers
 
 The launch file uses ROS2 launch event handlers to ensure proper ordering:
@@ -499,11 +562,20 @@ RegisterEventHandler(
         on_exit=[move_joint_group_server_action]
     )
 )
+
+# Start gripper_service after gripper_controller is spawned
+RegisterEventHandler(
+    event_handler=OnProcessExit(
+        target_action=spawn_gripper_controller,
+        on_exit=[gripper_service_action]
+    )
+)
 ```
 
 This ensures:
 - Controllers are spawned only after `joint_state_broadcaster` is active
 - `move_joint_group_server` starts only after `manipulator_controller` is spawned, guaranteeing controllers are available for discovery
+- `gripper_service` starts only after `gripper_controller` is spawned, guaranteeing the controller topic is available
 
 ---
 
@@ -527,6 +599,11 @@ This ensures:
    - Location: `ros_control/config/`
    - Loaded by `move_joint_group_server`
    - Defines: tolerances, timeouts, execution strategies
+
+4. **`gripper_config.yaml`**
+   - Location: `ros_control/config/`
+   - Loaded by `gripper_service`
+   - Defines: home_position, open_offset, controller_topic
 
 ### RViz Configuration
 

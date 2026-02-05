@@ -83,15 +83,15 @@ class GripperService(Node):
 
     def open_callback(self, request, response):
         """Handle gripper open request"""
-        # Calculate open position: home + offset for left, -(home + offset) for right
-        left_pos = self.home_position + self.open_offset
-        right_pos = -(self.home_position + self.open_offset)
+        # Both jaws get SAME value - URDF axes are opposite so same value = opposite movement
+        # Zero/negative = jaws apart (open), positive = jaws together (close)
+        position = self.home_position
 
-        if self._publish_command(left_pos, right_pos):
+        if self._publish_command(position, position):
             self.is_open = True
             response.success = True
-            response.message = f'Gripper opened to {self.open_offset}m'
-            self.get_logger().info(f'Gripper opened: [{left_pos}, {right_pos}]')
+            response.message = f'Gripper opened'
+            self.get_logger().info(f'Gripper opened: [{position}, {position}]')
         else:
             response.success = False
             response.message = 'Failed to publish open command'
@@ -100,15 +100,14 @@ class GripperService(Node):
 
     def close_callback(self, request, response):
         """Handle gripper close request"""
-        # Calculate close position: home for left, -home for right
-        left_pos = self.home_position
-        right_pos = -self.home_position
+        # Positive values = jaws move together (close)
+        position = self.home_position + self.open_offset
 
-        if self._publish_command(left_pos, right_pos):
+        if self._publish_command(position, position):
             self.is_open = False
             response.success = True
-            response.message = 'Gripper closed to home position'
-            self.get_logger().info(f'Gripper closed: [{left_pos}, {right_pos}]')
+            response.message = f'Gripper closed by {self.open_offset}m'
+            self.get_logger().info(f'Gripper closed: [{position}, {position}]')
         else:
             response.success = False
             response.message = 'Failed to publish close command'

@@ -93,6 +93,7 @@ def generate_launch_description():
     scara_controllers_file = PathJoinSubstitution([scara_pkg_share, 'config', 'scara_controllers.yaml'])
     rviz_config_file = PathJoinSubstitution([pkg_share, 'rviz', 'view_robot.rviz'])
     move_joint_group_config_file = PathJoinSubstitution([ros_control_pkg_share, 'config', 'move_joint_group_config.yaml'])
+    gripper_config_file = PathJoinSubstitution([ros_control_pkg_share, 'config', 'gripper_config.yaml'])
     
     # Launch arguments
     use_sim_time = LaunchConfiguration('use_sim_time')
@@ -274,6 +275,44 @@ def generate_launch_description():
             on_exit=[move_joint_group_server_action]
         )
     )
+
+    # Gripper service node (provides /gripper/open and /gripper/close services)
+    def create_gripper_service(context):
+        """Create gripper_service node with config file parameters"""
+        try:
+            use_sim_time_val = context.launch_configurations.get('use_sim_time', 'false') == 'true'
+            config_file = str(gripper_config_file.perform(context))
+
+            print(f"[manipulator_bringup] Creating gripper_service node...")
+            print(f"[manipulator_bringup]   config_file: {config_file}")
+
+            node = Node(
+                package='ros_control',
+                executable='gripper_service.py',
+                name='gripper_service',
+                output='screen',
+                parameters=[
+                    {'use_sim_time': use_sim_time_val},
+                    config_file
+                ]
+            )
+            print(f"[manipulator_bringup] gripper_service node created successfully")
+            return [node]
+        except Exception as e:
+            print(f"[manipulator_bringup] ERROR creating gripper_service: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+
+    gripper_service_action = OpaqueFunction(function=create_gripper_service)
+
+    # Event handler: start gripper_service after gripper_controller is spawned
+    delayed_gripper_service = RegisterEventHandler(
+        event_handler=OnProcessExit(
+            target_action=spawn_gripper_controller,
+            on_exit=[gripper_service_action]
+        )
+    )
     
     # RViz2 node (optional)
     rviz_node = Node(
@@ -299,6 +338,7 @@ def generate_launch_description():
         delayed_gripper_controller,
         delayed_scara_controller,
         delayed_move_joint_group_server,  # Starts after manipulator_controller is spawned
+        delayed_gripper_service,  # Starts after gripper_controller is spawned
         rviz_node
     ])
 

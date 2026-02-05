@@ -1,5 +1,10 @@
 # Gripper Service Configuration
 # Controls symmetric jaw movement for open/close operations
+#
+# Jaw Logic:
+#   - Both jaws get SAME value (URDF axes are opposite)
+#   - home_position (0.0) = jaws apart (OPEN)
+#   - home_position + open_offset = jaws together (CLOSED)
 
 gripper_service:
   ros__parameters:
@@ -8,8 +13,8 @@ gripper_service:
     right_joint: "selector_right_container_jaw_joint"
 
     # Position configuration
-    home_position: 0.0      # Closed position (meters)
-    open_offset: 0.05       # Opening distance from home (meters) = 5cm
+    home_position: 0.0      # Open position - jaws fully apart (meters)
+    open_offset: 0.05       # Closing distance from home (meters) = 5cm
 
     # Controller topic
     controller_topic: "/gripper_controller/commands"
