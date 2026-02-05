@@ -1,0 +1,359 @@
+# Manipulator Bringup Package Documentation
+
+## Overview
+
+The `manipulator_bringup` package provides a unified launch system for starting all infrastructure components of the manipulator ROS2 control system. This package orchestrates the startup of robot descriptions, controllers, and high-level control interfaces, automatically configuring them based on system requirements.
+
+**Key Features:**
+- Single launch file to start entire system
+- Automatic controller discovery and configuration
+- Dynamic parameter generation for unified control interface
+- Support for optional components (SCARA arm)
+- Flexible configuration via launch arguments
+
+---
+
+## Package Structure
+
+```
+src/manipulator_bringup/
+├── CMakeLists.txt                    # Build configuration
+├── package.xml                       # Package metadata and dependencies
+└── launch/
+    └── manipulator_bringup.launch.py # Main launch file (starts all infrastructure)
+```
+
+---
+
+## File Descriptions
+
+### Build Files
+
+#### `CMakeLists.txt`
+CMake build configuration for the ROS2 package.
+
+**Key sections:**
+- Finds required dependencies: `ament_cmake`
+- Installs `launch/` directory
+
+**Dependencies:**
+- `ament_cmake` - ROS2 build system
+
+#### `package.xml`
+ROS2 package manifest defining package metadata and dependencies.
+
+**Package information:**
+- Name: `manipulator_bringup`
+- Version: `0.1.0`
+- Description: Unified launch system for manipulator ROS2 control infrastructure
+- License: Apache-2.0
+
+**Dependencies:**
+
+| Category | Package | Purpose |
+|----------|---------|---------|
+| **Build** | `ament_cmake` | ROS2 build system |
+| **Runtime** | `manipulator_description` | Manipulator robot description |
+| **Runtime** | `scara_description` | SCARA arm description (optional) |
+| **Runtime** | `ros_control` | Unified control interface |
+| **Runtime** | `controller_manager` | Controller lifecycle management |
+| **Runtime** | `robot_state_publisher` | TF tree publishing |
+| **Runtime** | `rviz2` | Visualization (optional) |
+| **Python** | `python3-yaml` | YAML parsing for controller config extraction |
+
+---
+
+## Launch Files
+
+### `launch/manipulator_bringup.launch.py`
+
+**Main launch file** that starts all infrastructure components.
+
+**What it does:**
+1. Starts robot description (manipulator + optional SCARA)
+2. Starts ros2_control controller manager
+3. Spawns all controllers (manipulator, gripper, optional SCARA)
+4. Starts unified control interface (`move_joint_group_server`)
+5. Optionally launches RViz2 visualization
+
+**Key Features:**
+- **Automatic controller discovery**: Parses controller YAML files to extract controller-to-joints mapping
+- **Dynamic parameter generation**: Builds `controller_joints` parameter for `move_joint_group_server` automatically
+- **Conditional component loading**: Only starts SCARA-related components when `use_scara:=true`
+- **Single source of truth**: Uses existing controller YAML files, no duplication
+
+**See:** [launch_files.md](launch_files.md) for detailed documentation.
+
+---
+
+## Architecture
+
+### System Integration
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│              manipulator_bringup.launch.py                      │
+│                    (Orchestrator)                               │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │
+        ┌───────────────────┼───────────────────┐
+        │                   │                   │
+        ▼                   ▼                   ▼
+┌───────────────┐  ┌───────────────┐  ┌───────────────┐
+│   Robot       │  │   Controller  │  │   Unified     │
+│   Description │  │   Manager     │  │   Control     │
+│               │  │               │  │   Interface  │
+│ - URDF/Xacro  │  │ - Controllers │  │ - Action      │
+│ - TF Tree     │  │ - Hardware    │  │   Server     │
+│               │  │   Interface   │  │               │
+└───────┬───────┘  └───────┬───────┘  └───────┬───────┘
+        │                  │                   │
+        └──────────────────┼───────────────────┘
+                           │
+                           ▼
+              ┌────────────────────────┐
+              │   Hardware Interface  │
+              │   (Mock/Real)          │
+              └────────────────────────┘
+```
+
+### Component Flow
+
+```
+1. Launch manipulator_bringup.launch.py
+   │
+   ├─► Parse controller YAML files
+   │   ├─► manipulator_controllers.yaml
+   │   └─► scara_controllers.yaml (if use_scara)
+   │
+   ├─► Extract controller->joints mapping
+   │   ├─► manipulator_controller: [base_main_frame_joint, ...]
+   │   ├─► gripper_controller: [selector_left_container_jaw_joint, ...]
+   │   └─► scara_controller: [scara_shoulder_joint, ...] (if enabled)
+   │
+   ├─► Start robot_state_publisher
+   │   └─► Publishes TF tree from URDF
+   │
+   ├─► Start controller_manager
+   │   ├─► Loads hardware interface
+   │   └─► Manages controller lifecycle
+   │
+   ├─► Spawn controllers
+   │   ├─► joint_state_broadcaster (always)
+   │   ├─► manipulator_controller (always)
+   │   ├─► gripper_controller (always)
+   │   └─► scara_controller (if use_scara)
+   │
+   ├─► Start move_joint_group_server
+   │   └─► Passes controller_joints parameter (auto-generated)
+   │
+   └─► Start RViz2 (optional)
+       └─► Visualization
+```
+
+---
+
+## Design Decisions
+
+### Why Automatic Controller Discovery?
+
+**Problem:** `move_joint_group_server` needs to know which joints belong to which controllers.
+
+**Options Considered:**
+1. **Manual YAML config** - Separate file with controller->joints mapping
+2. **Automatic parsing** - Extract from existing controller YAML files
+
+**Decision: Automatic parsing**
+
+**Rationale:**
+- **Single source of truth**: Controller YAML files already define joints
+- **No duplication**: Avoids maintaining two separate configs
+- **Automatic sync**: Changes to controllers automatically reflected
+- **Less error-prone**: No risk of config drift
+
+### Controller Mapping Extraction
+
+The launch file parses controller YAML files to extract:
+
+```yaml
+# From manipulator_controllers.yaml
+manipulator_controller:
+  ros__parameters:
+    joints:
+      - base_main_frame_joint
+      - main_frame_selector_frame_joint
+      - selector_frame_picker_frame_joint
+
+# Extracted mapping:
+controller_joints = {
+  'manipulator_controller': [
+    'base_main_frame_joint',
+    'main_frame_selector_frame_joint',
+    'selector_frame_picker_frame_joint'
+  ],
+  'gripper_controller': [...],
+  'scara_controller': [...]  # if use_scara
+}
+```
+
+This mapping is passed to `move_joint_group_server` as a ROS2 parameter.
+
+### Excluded Controllers
+
+The following controllers are **not** included in the mapping:
+- `joint_state_broadcaster` - Not a control controller, only publishes state
+
+Only **control controllers** (those that accept commands) are included:
+- `manipulator_controller` - Trajectory control
+- `gripper_controller` - Position control
+- `scara_controller` - Trajectory control (if enabled)
+
+---
+
+## Dependencies
+
+### Package Dependencies
+
+| Package | Purpose |
+|---------|---------|
+| `manipulator_description` | Robot description and controllers |
+| `scara_description` | SCARA arm description (optional) |
+| `ros_control` | Unified control action server |
+| `controller_manager` | Controller lifecycle management |
+| `robot_state_publisher` | TF tree publishing |
+| `rviz2` | Visualization (optional) |
+
+### Python Dependencies
+
+| Package | Purpose |
+|---------|---------|
+| `python3-yaml` | YAML parsing for controller config extraction |
+
+---
+
+## Usage
+
+### Basic Usage
+
+**Start full system (manipulator only):**
+```bash
+ros2 launch manipulator_bringup manipulator_bringup.launch.py
+```
+
+**Start with SCARA arm:**
+```bash
+ros2 launch manipulator_bringup manipulator_bringup.launch.py use_scara:=true
+```
+
+**Start without visualization:**
+```bash
+ros2 launch manipulator_bringup manipulator_bringup.launch.py rviz:=false
+```
+
+**Start with simulation time:**
+```bash
+ros2 launch manipulator_bringup manipulator_bringup.launch.py use_sim_time:=true
+```
+
+### Launch Arguments
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `use_scara` | `false` | Attach SCARA arm to picker_frame |
+| `rviz` | `true` | Launch RViz2 visualization |
+| `use_sim_time` | `false` | Use simulation clock |
+
+---
+
+## What Gets Started
+
+When you launch `manipulator_bringup.launch.py`, the following infrastructure is started:
+
+### Always Started
+
+1. **robot_state_publisher**
+   - Publishes TF tree from URDF
+   - Topic: `/robot_description`
+
+2. **controller_manager** (ros2_control_node)
+   - Manages controller lifecycle
+   - Services: `/controller_manager/*`
+
+3. **joint_state_broadcaster**
+   - Publishes joint states
+   - Topic: `/joint_states`
+
+4. **manipulator_controller**
+   - Trajectory control for main axes
+   - Action: `/manipulator_controller/follow_joint_trajectory`
+
+5. **gripper_controller**
+   - Position control for gripper jaws
+   - Topic: `/gripper_controller/commands`
+
+6. **move_joint_group_server**
+   - Unified control interface
+   - Action: `/move_joint_group`
+   - Automatically configured with controller->joints mapping
+
+### Conditionally Started
+
+7. **scara_controller** (if `use_scara:=true`)
+   - Trajectory control for SCARA arm
+   - Action: `/scara_controller/follow_joint_trajectory`
+
+8. **rviz2** (if `rviz:=true`)
+   - 3D visualization
+   - Uses pre-configured RViz config
+
+---
+
+## Benefits
+
+### For Users
+
+- **Simple**: One command to start everything
+- **Automatic**: No manual configuration needed
+- **Flexible**: Launch arguments for customization
+- **Complete**: All infrastructure in one place
+
+### For Developers
+
+- **Maintainable**: Single source of truth for controller configs
+- **Extensible**: Easy to add new controllers or components
+- **Consistent**: Same launch file for all scenarios
+- **Documented**: Clear architecture and design decisions
+
+---
+
+## Future Extensions
+
+Potential additions to the bringup package:
+
+1. **Multiple launch variants**
+   - `manipulator_only.launch.py` - Just manipulator (no SCARA, no unified control)
+   - `full_system.launch.py` - Convenience wrapper for full system
+
+2. **Monitoring and diagnostics**
+   - System health monitoring
+   - Controller status checking
+   - Diagnostic aggregator
+
+3. **Configuration validation**
+   - Verify controller configs before starting
+   - Check for missing dependencies
+   - Validate joint names
+
+4. **Logging configuration**
+   - Centralized log configuration
+   - Log level management
+
+---
+
+## Related Documentation
+
+- **Launch Files**: [launch_files.md](launch_files.md) - Detailed launch file documentation
+- **Manipulator Description**: `../manipulator_description/package_structure.md`
+- **SCARA Description**: `../scara_description/package_structure.md`
+- **Unified Control**: `../ros_control/package_structure.md`
+

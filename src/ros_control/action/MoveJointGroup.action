@@ -1,0 +1,31 @@
+# Goal (запрос)
+# Наименования суставов (индивидуальные имена, не группы)
+string[] joint_names
+# Заданные позиции (метры для призматических, радианы для вращательных)
+float64[] target_positions
+# Максимальная скорость для каждого сустава (0.0 - скорость по умолчанию)
+# Должен соответствовать длине joint_names
+float64[] max_velocity
+
+---
+# Result (ответ)
+# true если суставы достигли позиции в пределах допуска
+bool success
+# Фактически достигнутые позиции
+float64[] final_position
+# Максимальная ошибка позиции
+float64 position_error
+# Общее время выполнения (секунды)
+float64 execution_time
+# Сообщение о результате
+string message
+
+---
+# Feedback (обратная связь)
+# Текущие позиции суставов
+string[] joint_names
+float64[] current_positions
+float64[] target_positions
+# Процент выполнения (0-100)
+float32 progress_percentage
+
