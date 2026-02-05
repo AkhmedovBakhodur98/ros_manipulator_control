@@ -1,0 +1,15 @@
+# Gripper Service Configuration
+# Controls symmetric jaw movement for open/close operations
+
+gripper_service:
+  ros__parameters:
+    # Joint configuration
+    left_joint: "selector_left_container_jaw_joint"
+    right_joint: "selector_right_container_jaw_joint"
+
+    # Position configuration
+    home_position: 0.0      # Closed position (meters)
+    open_offset: 0.05       # Opening distance from home (meters) = 5cm
+
+    # Controller topic
+    controller_topic: "/gripper_controller/commands"

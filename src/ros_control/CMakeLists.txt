@@ -28,6 +28,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 # Install Python scripts
 install(PROGRAMS
   src/move_joint_group_server.py
+  src/gripper_service.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
