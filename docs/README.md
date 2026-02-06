@@ -1,6 +1,6 @@
 # Documentation Overview
 
-This directory contains comprehensive documentation for the manipulator ROS2 control system, including both the main manipulator and the SCARA arm modules.
+This directory contains comprehensive documentation for the manipulator ROS2 control system, including the main manipulator, SCARA arm, unified control interface, and system bringup.
 
 ---
 
@@ -8,23 +8,31 @@ This directory contains comprehensive documentation for the manipulator ROS2 con
 
 ```
 docs/
-├── README.md                          # This file
-├── manipulator_description/         # Main manipulator documentation
-│   ├── frames_reference.md            # Coordinate frame reference
-│   ├── package_structure.md           # Package structure and files
-│   └── yaml_to_urdf.md                # Parameter flow from YAML to URDF
-├── manipulator_bringup/              # Bringup package documentation
-│   ├── package_structure.md           # Package architecture and structure
-│   └── launch_files.md                # Launch file documentation
-├── ros_control/                      # Unified control documentation
-│   ├── move_joint_group_server.md    # Action server documentation
-│   └── package_structure.md            # Package structure and files
-└── scara_description/                 # SCARA arm documentation
-    ├── CHANGELOG.md                   # Recent changes and updates
-    ├── configuration.md               # Configuration guide
-    ├── integration.md                 # Integration with other robots
-    ├── package_structure.md            # Package structure and files
-    └── ros2_control.md                # ros2_control integration
+├── README.md                              # This file
+├── project_structure/
+│   └── overview.md                        # High-level project overview
+├── manipulator_description/               # Main manipulator documentation
+│   ├── frames_reference.md                # Coordinate frame reference
+│   ├── package_structure.md               # Package structure and files
+│   └── yaml_to_urdf.md                    # Parameter flow from YAML to URDF
+├── scara_description/                     # SCARA arm documentation
+│   ├── CHANGELOG.md                       # Recent changes and updates
+│   ├── configuration.md                   # Configuration guide
+│   ├── integration.md                     # Integration with other robots
+│   ├── package_structure.md               # Package structure and files
+│   └── ros2_control.md                    # ros2_control integration
+├── ros_control/                           # Unified control interface documentation
+│   ├── package_structure.md               # Package structure and files
+│   ├── move_joint_group_server.md         # Joint movement action server
+│   ├── gripper_service.md                 # Gripper open/close service
+│   ├── get_container_action.md            # GetContainer architectural design
+│   ├── get_container_server.md            # GetContainer server documentation
+│   ├── place_container_action.md          # PlaceContainer architectural design
+│   └── place_container_server.md          # PlaceContainer server documentation
+└── manipulator_bringup/                   # System bringup documentation
+    ├── package_structure.md               # Package structure and files
+    ├── launch_files.md                    # Launch file documentation
+    └── implementation_review.md           # Implementation review notes
 ```
 
 ---
@@ -34,19 +42,22 @@ docs/
 ### For New Users
 
 **Getting Started:**
-1. Start with [manipulator_bringup/package_structure.md](manipulator_bringup/package_structure.md) to understand how to launch the system
+1. Start with [project_structure/overview.md](project_structure/overview.md) for a high-level project overview
 2. Read [manipulator_description/package_structure.md](manipulator_description/package_structure.md) to understand the main system
 3. Read [scara_description/package_structure.md](scara_description/package_structure.md) to learn about the SCARA module
-4. Review [scara_description/integration.md](scara_description/integration.md) to see how components work together
+4. Read [ros_control/package_structure.md](ros_control/package_structure.md) to understand the control interface
+5. Read [manipulator_bringup/launch_files.md](manipulator_bringup/launch_files.md) to understand how everything starts
 
 **Configuration:**
 - [scara_description/configuration.md](scara_description/configuration.md) - Configure SCARA parameters
 - [manipulator_description/yaml_to_urdf.md](manipulator_description/yaml_to_urdf.md) - Understand parameter system
 
 **Control:**
-- [manipulator_bringup/launch_files.md](manipulator_bringup/launch_files.md) - Launch all infrastructure
-- [scara_description/ros2_control.md](scara_description/ros2_control.md) - Control SCARA with ros2_control
-- [ros_control/package_structure.md](ros_control/package_structure.md) - Unified control interface
+- [ros_control/move_joint_group_server.md](ros_control/move_joint_group_server.md) - Unified joint movement
+- [ros_control/gripper_service.md](ros_control/gripper_service.md) - Gripper open/close control
+- [ros_control/get_container_server.md](ros_control/get_container_server.md) - Container pick operations
+- [ros_control/place_container_server.md](ros_control/place_container_server.md) - Container place operations
+- [scara_description/ros2_control.md](scara_description/ros2_control.md) - SCARA ros2_control integration
 
 **Reference:**
 - [manipulator_description/frames_reference.md](manipulator_description/frames_reference.md) - Frame coordinate systems
@@ -188,33 +199,103 @@ docs/
 
 ---
 
+## ROS Control Documentation
+
+### [package_structure.md](ros_control/package_structure.md)
+**Purpose:** Complete overview of the ros_control package — unified control interface.
+
+**Contents:**
+- Package organization and file descriptions
+- Action definitions (MoveJointGroup, GetContainer, PlaceContainer)
+- Configuration files for all servers
+- Source code descriptions
+- Architecture and data flow diagrams
+- ROS2 topics, services, and actions reference
+- Usage examples (CLI, Python, C++)
+- Troubleshooting
+
+**When to read:** First document to read for understanding the control interface. Essential for developers.
+
+---
+
+### [move_joint_group_server.md](ros_control/move_joint_group_server.md)
+**Purpose:** Documentation for the MoveJointGroup action server — coordinated multi-joint movement.
+
+**When to read:** When you need to move manipulator joints programmatically.
+
+---
+
+### [gripper_service.md](ros_control/gripper_service.md)
+**Purpose:** Documentation for the gripper open/close service node.
+
+**When to read:** When you need to control the gripper or understand jaw movement.
+
+---
+
+### [get_container_server.md](ros_control/get_container_server.md)
+**Purpose:** Documentation for the GetContainer action server — container pick operations.
+
+**Contents:**
+- Execution flow (open gripper -> move -> close gripper -> lift)
+- Action definition and feedback steps
+- Configuration parameters
+- Usage examples (CLI, Python, C++)
+- Implementation details
+
+**When to read:** When you need to perform container pick operations.
+
+---
+
+### [place_container_server.md](ros_control/place_container_server.md)
+**Purpose:** Documentation for the PlaceContainer action server — container place operations (reverse of GetContainer).
+
+**Contents:**
+- Execution flow (move to place -> open gripper -> retract)
+- Action definition and feedback steps
+- Configuration parameters
+- Usage examples (CLI, Python, C++)
+- Implementation details
+
+**When to read:** When you need to perform container place operations.
+
+---
+
+### [get_container_action.md](ros_control/get_container_action.md)
+**Purpose:** Architectural design document for the GetContainer action.
+
+**When to read:** When you need to understand design decisions behind the GetContainer implementation.
+
+---
+
+### [place_container_action.md](ros_control/place_container_action.md)
+**Purpose:** Architectural design document for the PlaceContainer action.
+
+**When to read:** When you need to understand design decisions behind the PlaceContainer implementation.
+
+---
+
 ## Manipulator Bringup Documentation
 
 ### [package_structure.md](manipulator_bringup/package_structure.md)
-**Purpose:** Architecture and structure of the bringup package.
+**Purpose:** Overview of the manipulator_bringup package.
 
-**Contents:**
-- Package organization
-- Design decisions (automatic controller discovery)
-- System integration architecture
-- Component flow
-- Usage examples
-
-**When to read:** When you want to understand how the bringup system works or need to start the entire infrastructure.
+**When to read:** To understand the bringup package organization.
 
 ---
 
 ### [launch_files.md](manipulator_bringup/launch_files.md)
-**Purpose:** Detailed documentation of the main launch file.
+**Purpose:** Detailed documentation of `manipulator_bringup.launch.py` — the main launch file.
 
 **Contents:**
-- Launch arguments and options
-- Step-by-step execution process
+- Launch arguments (use_scara, rviz, use_sim_time)
+- Step-by-step execution order
 - Controller mapping extraction
-- Nodes started and their configuration
-- Troubleshooting guide
+- All nodes started (robot_state_publisher, controller_manager, controllers, move_joint_group_server, gripper_service, get_container_server, place_container_server, rviz2)
+- Event handler sequencing
+- Configuration files used
+- Troubleshooting
 
-**When to read:** When you need to understand launch file behavior, modify launch configuration, or debug startup issues.
+**When to read:** When you need to understand system startup or debug launch issues.
 
 ---
 
@@ -222,13 +303,23 @@ docs/
 
 ### I want to...
 
-**...start the entire system:**
-- Read [manipulator_bringup/package_structure.md](manipulator_bringup/package_structure.md)
-- Then [manipulator_bringup/launch_files.md](manipulator_bringup/launch_files.md) for launch details
-
 **...understand the overall system:**
-- Start with [manipulator_description/package_structure.md](manipulator_description/package_structure.md)
-- Then read [scara_description/package_structure.md](scara_description/package_structure.md)
+- Start with [project_structure/overview.md](project_structure/overview.md)
+- Then read [manipulator_description/package_structure.md](manipulator_description/package_structure.md)
+- Then read [ros_control/package_structure.md](ros_control/package_structure.md)
+
+**...launch the full system:**
+- Read [manipulator_bringup/launch_files.md](manipulator_bringup/launch_files.md)
+
+**...move manipulator joints:**
+- Read [ros_control/move_joint_group_server.md](ros_control/move_joint_group_server.md)
+
+**...pick or place containers:**
+- Read [ros_control/get_container_server.md](ros_control/get_container_server.md)
+- Read [ros_control/place_container_server.md](ros_control/place_container_server.md)
+
+**...control the gripper:**
+- Read [ros_control/gripper_service.md](ros_control/gripper_service.md)
 
 **...integrate SCARA with my robot:**
 - Read [scara_description/integration.md](scara_description/integration.md)
@@ -283,7 +374,7 @@ See [scara_description/ros2_control.md](scara_description/ros2_control.md) for S
 ## Package Relationships
 
 ```
-manipulator_description (main system)
+manipulator_description (robot model)
     │
     ├── Base assembly (rail + carriage)
     ├── Selector assembly (vertical lift + gripper)
@@ -292,6 +383,21 @@ manipulator_description (main system)
     └── scara_description (optional module)
         └── SCARA arm (3-DOF arm)
             └── Attaches to picker_frame
+
+ros_control (unified control interface)
+    │
+    ├── move_joint_group_server  ── Coordinated joint movement
+    ├── gripper_service          ── Gripper open/close
+    ├── get_container_server     ── Container pick orchestration
+    └── place_container_server   ── Container place orchestration
+
+manipulator_bringup (system startup)
+    │
+    └── manipulator_bringup.launch.py
+        ├── Starts robot_state_publisher
+        ├── Starts controller_manager + controllers
+        ├── Starts all ros_control nodes
+        └── Optionally starts RViz2
 ```
 
 The SCARA arm is a **modular, reusable component** that can be:
@@ -305,41 +411,65 @@ The SCARA arm is a **modular, reusable component** that can be:
 
 ### Launch Commands
 
-**Recommended: Use bringup package (starts everything):**
+**Full system (recommended):**
 ```bash
-# Full system (manipulator + SCARA + unified control)
 ros2 launch manipulator_bringup manipulator_bringup.launch.py use_scara:=true
-
-# Manipulator only
-ros2 launch manipulator_bringup manipulator_bringup.launch.py
 ```
-
-**Alternative: Individual package launches**
 
 **Manipulator only:**
 ```bash
-ros2 launch manipulator_description display.launch.py
-ros2 launch manipulator_description manipulator_control.launch.py
+ros2 launch manipulator_bringup manipulator_bringup.launch.py
 ```
 
-**Manipulator with SCARA:**
+**Without visualization:**
+```bash
+ros2 launch manipulator_bringup manipulator_bringup.launch.py use_scara:=true rviz:=false
+```
+
+**Visualization only (no control):**
 ```bash
 ros2 launch manipulator_description display.launch.py use_scara:=true
-ros2 launch manipulator_description manipulator_control.launch.py use_scara:=true
 ```
 
 **SCARA standalone:**
 ```bash
 ros2 launch scara_description display.launch.py
-ros2 launch scara_description scara_control.launch.py
+```
+
+### Action Commands
+
+```bash
+# Move joints
+ros2 action send_goal /move_joint_group ros_control/action/MoveJointGroup \
+  "{joint_names: ['base_main_frame_joint'], target_positions: [1.5], max_velocity: [0.5]}"
+
+# Pick container
+ros2 action send_goal /get_container ros_control/action/GetContainer "{}" --feedback
+
+# Place container
+ros2 action send_goal /place_container ros_control/action/PlaceContainer "{}" --feedback
+```
+
+### Service Commands
+
+```bash
+# Open gripper
+ros2 service call /gripper/open std_srvs/srv/Trigger
+
+# Close gripper
+ros2 service call /gripper/close std_srvs/srv/Trigger
 ```
 
 ### Configuration Files
 
 - `src/manipulator_description/config/manipulator_params.yaml` - Main manipulator parameters
-- `src/scara_description/config/scara_params.yaml` - SCARA parameters
 - `src/manipulator_description/config/manipulator_controllers.yaml` - Manipulator controllers
+- `src/scara_description/config/scara_params.yaml` - SCARA parameters
 - `src/scara_description/config/scara_controllers.yaml` - SCARA controllers
+- `src/ros_control/config/move_joint_group_config.yaml` - Joint movement server config
+- `src/ros_control/config/gripper_config.yaml` - Gripper service config
+- `src/ros_control/config/get_container_config.yaml` - GetContainer server config
+- `src/ros_control/config/place_container_config.yaml` - PlaceContainer server config
 
 ### Key Links
 
@@ -365,10 +495,10 @@ When adding or modifying documentation:
 
 If you have questions about:
 - **System architecture:** See package structure documents
+- **System startup:** See [manipulator_bringup/launch_files.md](manipulator_bringup/launch_files.md)
 - **Configuration:** See configuration guides
 - **Integration:** See integration guides
-- **Control:** See ros2_control documentation
+- **Control:** See ros_control documentation
 - **Frames:** See frames reference
 
-For code-related questions, refer to the source code in `src/manipulator_description/` and `src/scara_description/`.
-
+For code-related questions, refer to the source code in `src/`.
