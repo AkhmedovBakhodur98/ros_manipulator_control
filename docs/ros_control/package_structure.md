@@ -12,13 +12,18 @@ src/ros_control/
 ├── package.xml                       # Package metadata and dependencies
 ├── README.md                         # Quick start guide
 ├── action/
-│   └── MoveJointGroup.action         # Action definition (Goal, Result, Feedback)
+│   ├── MoveJointGroup.action         # Joint movement action definition
+│   └── GetContainer.action           # Container pick action definition
 ├── config/
-│   └── move_joint_group_config.yaml  # Server configuration (tolerances, timeouts, strategies)
+│   ├── move_joint_group_config.yaml  # MoveJointGroup server configuration
+│   ├── gripper_config.yaml           # Gripper service configuration
+│   └── get_container_config.yaml     # GetContainer server configuration
 ├── launch/
 │   └── move_joint_group_server.launch.py  # Launch file for the action server
 └── src/
-    └── move_joint_group_server.py    # Action server implementation
+    ├── move_joint_group_server.py    # Joint movement action server
+    ├── gripper_service.py            # Gripper open/close services
+    └── get_container_server.py       # Container pick orchestration server
 ```
 
 ---
@@ -107,6 +112,41 @@ ros2 action send_goal /move_joint_group \
   }"
 ```
 
+#### `action/GetContainer.action`
+Defines the action interface for container pick operations.
+
+**Goal (Request):**
+```yaml
+# Empty - trigger only
+```
+
+**Result (Response):**
+```yaml
+bool success           # True if container picked successfully
+string message         # Result message
+float64 execution_time # Total execution time (seconds)
+```
+
+**Feedback (Progress Updates):**
+```yaml
+string current_step        # Current operation step
+float32 progress_percentage # Progress (0-100%)
+```
+
+**Feedback Steps:**
+| Step | Progress | Description |
+|------|----------|-------------|
+| Opening gripper | 0% | Sending open command |
+| Moving to container | 25% | Moving to pickup position |
+| Closing gripper | 50% | Closing gripper + settle time |
+| Lifting container | 75% | Lifting selector frame |
+| Complete | 100% | Operation finished |
+
+**Usage Example:**
+```bash
+ros2 action send_goal /get_container ros_control/action/GetContainer "{}" --feedback
+```
+
 ---
 
 ### Configuration Files
@@ -155,6 +195,48 @@ discovery:
 
 feedback:
   publish_rate: 10.0
+```
+
+#### `config/gripper_config.yaml`
+Configuration file for the gripper service.
+
+**Configuration Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `left_joint` | string | `selector_left_container_jaw_joint` | Left jaw joint name |
+| `right_joint` | string | `selector_right_container_jaw_joint` | Right jaw joint name |
+| `home_position` | float | `0.0` | Open position (jaws apart) |
+| `open_offset` | float | `0.05` | Distance jaws move when closing |
+| `controller_topic` | string | `/gripper_controller/commands` | Controller command topic |
+
+#### `config/get_container_config.yaml`
+Configuration file for the GetContainer action server.
+
+**Configuration Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `container_position` | dict | - | Target joint positions for pickup |
+| `lift_joint` | string | `main_frame_selector_frame_joint` | Joint for Z-axis lift |
+| `lift_height` | float | `0.20` | Lift distance (meters) |
+| `gripper_settle_time` | float | `1.0` | Wait time after gripper close |
+| `timeouts.move_timeout` | float | `30.0` | Movement timeout |
+| `timeouts.gripper_timeout` | float | `5.0` | Gripper service timeout |
+
+**Example Configuration:**
+```yaml
+get_container_server:
+  ros__parameters:
+    container_position:
+      base_main_frame_joint: 1.5
+      main_frame_selector_frame_joint: 0.2
+    lift_joint: main_frame_selector_frame_joint
+    lift_height: 0.20
+    gripper_settle_time: 1.0
+    timeouts:
+      move_timeout: 30.0
+      gripper_timeout: 5.0
 ```
 
 ---
@@ -253,6 +335,52 @@ Main implementation of the MoveJointGroup action server.
 - **Controller Errors**: Controller not available, goal rejected
 - **Timeout**: Joints don't reach target within timeout
 - **Cancellation**: User cancels goal (cancels all active goals)
+
+#### `src/gripper_service.py`
+Simple service node for gripper open/close control.
+
+**Class: `GripperService`**
+
+**Services Provided:**
+
+| Service | Type | Description |
+|---------|------|-------------|
+| `/gripper/open` | `std_srvs/srv/Trigger` | Opens gripper (jaws apart) |
+| `/gripper/close` | `std_srvs/srv/Trigger` | Closes gripper (jaws together) |
+
+**Published Topics:**
+
+| Topic | Type | Description |
+|-------|------|-------------|
+| `/gripper_controller/commands` | `std_msgs/msg/Float64MultiArray` | Position commands `[left, right]` |
+
+**See detailed documentation:** [gripper_service.md](gripper_service.md)
+
+#### `src/get_container_server.py`
+High-level action server for container pick operations.
+
+**Class: `GetContainerServer`**
+
+**Key Features:**
+- Uses `MultiThreadedExecutor` for async operations
+- Coordinates gripper services and MoveJointGroup action
+- Implements sequential execution with settle time
+
+**Dependencies:**
+
+| Interface | Type | Purpose |
+|-----------|------|---------|
+| `/gripper/open` | Service | Open gripper before pickup |
+| `/gripper/close` | Service | Close gripper to grab container |
+| `/move_joint_group` | Action | Move manipulator joints |
+
+**Execution Flow:**
+1. Open gripper
+2. Move to container position
+3. Close gripper + wait settle time
+4. Lift container (Z axis)
+
+**See detailed documentation:** [get_container_server.md](get_container_server.md)
 
 ---
 
@@ -378,33 +506,46 @@ Launch file for starting the MoveJointGroup action server.
 
 ### Published Topics
 
-None (uses action interface for communication)
+| Topic | Type | Publisher | Description |
+|-------|------|-----------|-------------|
+| `/gripper_controller/commands` | `std_msgs/msg/Float64MultiArray` | `gripper_service` | Gripper position commands |
 
 ---
 
 ## ROS2 Services
 
+### Service Servers
+
+| Service | Type | Provider | Description |
+|---------|------|----------|-------------|
+| `/gripper/open` | `std_srvs/srv/Trigger` | `gripper_service` | Open gripper |
+| `/gripper/close` | `std_srvs/srv/Trigger` | `gripper_service` | Close gripper |
+
 ### Service Clients
 
-| Service | Type | Description |
-|---------|------|-------------|
-| `/controller_manager/list_controllers` | `controller_manager_msgs/ListControllers` | Query active controllers |
+| Service | Type | Consumer | Description |
+|---------|------|----------|-------------|
+| `/controller_manager/list_controllers` | `controller_manager_msgs/ListControllers` | `move_joint_group_server` | Query active controllers |
+| `/gripper/open` | `std_srvs/srv/Trigger` | `get_container_server` | Open gripper |
+| `/gripper/close` | `std_srvs/srv/Trigger` | `get_container_server` | Close gripper |
 
 ---
 
 ## ROS2 Actions
 
-### Action Server
+### Action Servers
 
-| Action | Type | Description |
-|--------|------|-------------|
-| `/move_joint_group` | `ros_control/action/MoveJointGroup` | Main action interface for coordinated joint movement |
+| Action | Type | Provider | Description |
+|--------|------|----------|-------------|
+| `/move_joint_group` | `ros_control/action/MoveJointGroup` | `move_joint_group_server` | Coordinated joint movement |
+| `/get_container` | `ros_control/action/GetContainer` | `get_container_server` | Container pick orchestration |
 
-### Action Clients (Created Dynamically)
+### Action Clients
 
-| Action | Type | Description |
-|--------|------|-------------|
-| `/{controller_name}/follow_joint_trajectory` | `control_msgs/action/FollowJointTrajectory` | Trajectory control for action-based controllers |
+| Action | Type | Consumer | Description |
+|--------|------|----------|-------------|
+| `/{controller_name}/follow_joint_trajectory` | `control_msgs/action/FollowJointTrajectory` | `move_joint_group_server` | Trajectory controllers |
+| `/move_joint_group` | `ros_control/action/MoveJointGroup` | `get_container_server` | Joint movement |
 
 ---
 
@@ -633,7 +774,9 @@ discovery:
 
 ## Related Documentation
 
-- **Launch File**: `docs/ros_control/move_joint_group_server_launch.md`
+- **MoveJointGroup Server**: [move_joint_group_server.md](move_joint_group_server.md)
+- **Gripper Service**: [gripper_service.md](gripper_service.md)
+- **GetContainer Server**: [get_container_server.md](get_container_server.md)
 - **Package README**: `src/ros_control/README.md`
 - **Manipulator Description**: `docs/manipulator_description/package_structure.md`
 - **SCARA Description**: `docs/scara_description/package_structure.md`

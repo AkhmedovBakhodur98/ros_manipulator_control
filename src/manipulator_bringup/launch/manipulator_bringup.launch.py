@@ -94,6 +94,7 @@ def generate_launch_description():
     rviz_config_file = PathJoinSubstitution([pkg_share, 'rviz', 'view_robot.rviz'])
     move_joint_group_config_file = PathJoinSubstitution([ros_control_pkg_share, 'config', 'move_joint_group_config.yaml'])
     gripper_config_file = PathJoinSubstitution([ros_control_pkg_share, 'config', 'gripper_config.yaml'])
+    get_container_config_file = PathJoinSubstitution([ros_control_pkg_share, 'config', 'get_container_config.yaml'])
     
     # Launch arguments
     use_sim_time = LaunchConfiguration('use_sim_time')
@@ -313,7 +314,46 @@ def generate_launch_description():
             on_exit=[gripper_service_action]
         )
     )
-    
+
+    # GetContainer action server node
+    def create_get_container_server(context):
+        """Create get_container_server node with config file parameters"""
+        try:
+            use_sim_time_val = context.launch_configurations.get('use_sim_time', 'false') == 'true'
+            config_file = str(get_container_config_file.perform(context))
+
+            print(f"[manipulator_bringup] Creating get_container_server node...")
+            print(f"[manipulator_bringup]   config_file: {config_file}")
+
+            node = Node(
+                package='ros_control',
+                executable='get_container_server.py',
+                name='get_container_server',
+                output='screen',
+                parameters=[
+                    {'use_sim_time': use_sim_time_val},
+                    config_file
+                ]
+            )
+            print(f"[manipulator_bringup] get_container_server node created successfully")
+            return [node]
+        except Exception as e:
+            print(f"[manipulator_bringup] ERROR creating get_container_server: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+
+    get_container_server_action = OpaqueFunction(function=create_get_container_server)
+
+    # Event handler: start get_container_server after gripper_service is started
+    # This ensures both gripper services and move_joint_group are available
+    delayed_get_container_server = RegisterEventHandler(
+        event_handler=OnProcessExit(
+            target_action=spawn_gripper_controller,
+            on_exit=[get_container_server_action]
+        )
+    )
+
     # RViz2 node (optional)
     rviz_node = Node(
         package='rviz2',
@@ -339,6 +379,7 @@ def generate_launch_description():
         delayed_scara_controller,
         delayed_move_joint_group_server,  # Starts after manipulator_controller is spawned
         delayed_gripper_service,  # Starts after gripper_controller is spawned
+        delayed_get_container_server,  # Starts after gripper_controller is spawned
         rviz_node
     ])
 

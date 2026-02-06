@@ -1,0 +1,10 @@
+# Goal (empty for MVP - just trigger)
+---
+# Result
+bool success
+string message
+float64 execution_time
+---
+# Feedback
+string current_step
+float32 progress_percentage

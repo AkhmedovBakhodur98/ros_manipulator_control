@@ -26,10 +26,13 @@ Main manipulator robot definition.
 - `urdf/` - Robot description (xacro)
 
 ### ros_control
-Unified control interface with action servers.
+Unified control interface with action servers and services.
 - `src/move_joint_group_server.py` - Joint group action server
-- `src/gripper_service.py` - Gripper control service
-- `config/` - Controller configurations
+- `src/gripper_service.py` - Gripper open/close services
+- `src/get_container_server.py` - Container pick orchestration action server
+- `action/MoveJointGroup.action` - Joint movement action definition
+- `action/GetContainer.action` - Container pick action definition
+- `config/` - Server configurations
 
 ### scara_description
 Modular 3-DOF SCARA arm (can be used standalone or attached to manipulator).
