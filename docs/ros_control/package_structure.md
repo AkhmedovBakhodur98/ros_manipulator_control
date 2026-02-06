@@ -13,17 +13,20 @@ src/ros_control/
 ├── README.md                         # Quick start guide
 ├── action/
 │   ├── MoveJointGroup.action         # Joint movement action definition
-│   └── GetContainer.action           # Container pick action definition
+│   ├── GetContainer.action           # Container pick action definition
+│   └── PlaceContainer.action         # Container place action definition
 ├── config/
 │   ├── move_joint_group_config.yaml  # MoveJointGroup server configuration
 │   ├── gripper_config.yaml           # Gripper service configuration
-│   └── get_container_config.yaml     # GetContainer server configuration
+│   ├── get_container_config.yaml     # GetContainer server configuration
+│   └── place_container_config.yaml   # PlaceContainer server configuration
 ├── launch/
 │   └── move_joint_group_server.launch.py  # Launch file for the action server
 └── src/
     ├── move_joint_group_server.py    # Joint movement action server
     ├── gripper_service.py            # Gripper open/close services
-    └── get_container_server.py       # Container pick orchestration server
+    ├── get_container_server.py       # Container pick orchestration server
+    └── place_container_server.py     # Container place orchestration server
 ```
 
 ---
@@ -36,8 +39,8 @@ src/ros_control/
 CMake build configuration for the ROS2 package.
 
 **Key sections:**
-- **Action generation**: Generates ROS2 action interfaces from `MoveJointGroup.action`
-- **Python script installation**: Installs `move_joint_group_server.py` as executable
+- **Action generation**: Generates ROS2 action interfaces from `MoveJointGroup.action`, `GetContainer.action`, `PlaceContainer.action`
+- **Python script installation**: Installs `move_joint_group_server.py`, `gripper_service.py`, `get_container_server.py`, `place_container_server.py` as executables
 - **Resource installation**: Installs `config/` and `launch/` directories
 
 **Dependencies:**
@@ -147,6 +150,40 @@ float32 progress_percentage # Progress (0-100%)
 ros2 action send_goal /get_container ros_control/action/GetContainer "{}" --feedback
 ```
 
+#### `action/PlaceContainer.action`
+Defines the action interface for container place operations (reverse of GetContainer).
+
+**Goal (Request):**
+```yaml
+# Empty - trigger only
+```
+
+**Result (Response):**
+```yaml
+bool success           # True if container placed successfully
+string message         # Result message
+float64 execution_time # Total execution time (seconds)
+```
+
+**Feedback (Progress Updates):**
+```yaml
+string current_step        # Current operation step
+float32 progress_percentage # Progress (0-100%)
+```
+
+**Feedback Steps:**
+| Step | Progress | Description |
+|------|----------|-------------|
+| Moving to place position | 0% | Moving to placement position |
+| Opening gripper | 33% | Opening gripper + settle time |
+| Retracting | 66% | Lowering selector to clear container |
+| Complete | 100% | Operation finished |
+
+**Usage Example:**
+```bash
+ros2 action send_goal /place_container ros_control/action/PlaceContainer "{}" --feedback
+```
+
 ---
 
 ### Configuration Files
@@ -233,6 +270,35 @@ get_container_server:
       main_frame_selector_frame_joint: 0.2
     lift_joint: main_frame_selector_frame_joint
     lift_height: 0.20
+    gripper_settle_time: 1.0
+    timeouts:
+      move_timeout: 30.0
+      gripper_timeout: 5.0
+```
+
+#### `config/place_container_config.yaml`
+Configuration file for the PlaceContainer action server.
+
+**Configuration Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `place_position` | dict | - | Target joint positions for placement |
+| `retract_joint` | string | `main_frame_selector_frame_joint` | Joint for retraction |
+| `retract_distance` | float | `0.10` | Distance to lower after release (meters) |
+| `gripper_settle_time` | float | `1.0` | Wait time after gripper open |
+| `timeouts.move_timeout` | float | `30.0` | Movement timeout |
+| `timeouts.gripper_timeout` | float | `5.0` | Gripper service timeout |
+
+**Example Configuration:**
+```yaml
+place_container_server:
+  ros__parameters:
+    place_position:
+      base_main_frame_joint: 1.5
+      main_frame_selector_frame_joint: 0.2
+    retract_joint: main_frame_selector_frame_joint
+    retract_distance: 0.10
     gripper_settle_time: 1.0
     timeouts:
       move_timeout: 30.0
@@ -382,6 +448,31 @@ High-level action server for container pick operations.
 
 **See detailed documentation:** [get_container_server.md](get_container_server.md)
 
+#### `src/place_container_server.py`
+High-level action server for container place operations (reverse of GetContainer).
+
+**Class: `PlaceContainerServer`**
+
+**Key Features:**
+- Uses `MultiThreadedExecutor` for async operations
+- Coordinates MoveJointGroup action and gripper services
+- Implements sequential execution with settle time
+- Retracts selector after release to clear container
+
+**Dependencies:**
+
+| Interface | Type | Purpose |
+|-----------|------|---------|
+| `/gripper/open` | Service | Open gripper to release container |
+| `/move_joint_group` | Action | Move manipulator joints |
+
+**Execution Flow:**
+1. Move to place position
+2. Open gripper + wait settle time
+3. Retract (lower selector by `retract_distance`)
+
+**See detailed documentation:** [place_container_server.md](place_container_server.md)
+
 ---
 
 ### Launch Files
@@ -528,6 +619,7 @@ Launch file for starting the MoveJointGroup action server.
 | `/controller_manager/list_controllers` | `controller_manager_msgs/ListControllers` | `move_joint_group_server` | Query active controllers |
 | `/gripper/open` | `std_srvs/srv/Trigger` | `get_container_server` | Open gripper |
 | `/gripper/close` | `std_srvs/srv/Trigger` | `get_container_server` | Close gripper |
+| `/gripper/open` | `std_srvs/srv/Trigger` | `place_container_server` | Open gripper to release |
 
 ---
 
@@ -539,6 +631,7 @@ Launch file for starting the MoveJointGroup action server.
 |--------|------|----------|-------------|
 | `/move_joint_group` | `ros_control/action/MoveJointGroup` | `move_joint_group_server` | Coordinated joint movement |
 | `/get_container` | `ros_control/action/GetContainer` | `get_container_server` | Container pick orchestration |
+| `/place_container` | `ros_control/action/PlaceContainer` | `place_container_server` | Container place orchestration |
 
 ### Action Clients
 
@@ -546,6 +639,7 @@ Launch file for starting the MoveJointGroup action server.
 |--------|------|----------|-------------|
 | `/{controller_name}/follow_joint_trajectory` | `control_msgs/action/FollowJointTrajectory` | `move_joint_group_server` | Trajectory controllers |
 | `/move_joint_group` | `ros_control/action/MoveJointGroup` | `get_container_server` | Joint movement |
+| `/move_joint_group` | `ros_control/action/MoveJointGroup` | `place_container_server` | Joint movement |
 
 ---
 
@@ -777,6 +871,7 @@ discovery:
 - **MoveJointGroup Server**: [move_joint_group_server.md](move_joint_group_server.md)
 - **Gripper Service**: [gripper_service.md](gripper_service.md)
 - **GetContainer Server**: [get_container_server.md](get_container_server.md)
+- **PlaceContainer Server**: [place_container_server.md](place_container_server.md)
 - **Package README**: `src/ros_control/README.md`
 - **Manipulator Description**: `docs/manipulator_description/package_structure.md`
 - **SCARA Description**: `docs/scara_description/package_structure.md`

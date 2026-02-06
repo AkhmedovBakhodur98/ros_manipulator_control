@@ -18,6 +18,7 @@ find_package(builtin_interfaces REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "action/MoveJointGroup.action"
   "action/GetContainer.action"
+  "action/PlaceContainer.action"
   DEPENDENCIES
     sensor_msgs
     control_msgs
@@ -31,6 +32,7 @@ install(PROGRAMS
   src/move_joint_group_server.py
   src/gripper_service.py
   src/get_container_server.py
+  src/place_container_server.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

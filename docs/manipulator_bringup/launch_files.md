@@ -17,6 +17,7 @@ The main launch file that starts all infrastructure:
 - Unified control interface (`move_joint_group_server`)
 - Gripper service (`gripper_service`) for simple open/close control
 - Container pick orchestration (`get_container_server`)
+- Container place orchestration (`place_container_server`)
 - Optional RViz2 visualization
 
 **Most Common Usage:** Launch with `use_scara:=true` to enable the full system including the SCARA arm. This is the recommended configuration for typical operations.
@@ -123,7 +124,11 @@ ros2 launch manipulator_bringup manipulator_bringup.launch.py rviz:=false
     ├─► Waits for gripper_controller to be spawned
     └─► Provides /get_container action for container pick operations
 
-11. Start RViz2 (if rviz:=true)
+11. Start place_container_server (after gripper_controller)
+    ├─► Waits for gripper_controller to be spawned
+    └─► Provides /place_container action for container place operations
+
+12. Start RViz2 (if rviz:=true)
     └─► Loads pre-configured RViz config
 ```
 
@@ -570,7 +575,70 @@ get_container_server:
 
 ---
 
-### 10. rviz2 (Conditional)
+### 10. place_container_server
+
+**Package:** `ros_control`
+**Executable:** `place_container_server.py`
+**Purpose:** High-level action server for container place operations (reverse of get_container)
+
+**Spawned:** After `gripper_controller` (via event handler)
+
+**Why Delayed Startup:**
+- Requires `gripper_service` to be available (`/gripper/open`)
+- Requires `move_joint_group_server` to be available (`/move_joint_group` action)
+- Starting after `gripper_controller` ensures both dependencies are ready
+
+**Parameters:**
+- `use_sim_time` - Use simulation clock
+- `place_container_config.yaml` - Server configuration
+
+**Node Creation:**
+Uses `OpaqueFunction` similar to other service nodes:
+
+```python
+def create_place_container_server(context):
+    config_file = str(place_container_config_file.perform(context))
+    node = Node(
+        package='ros_control',
+        executable='place_container_server.py',
+        name='place_container_server',
+        parameters=[
+            {'use_sim_time': use_sim_time_val},
+            config_file
+        ]
+    )
+    return [node]
+```
+
+**Actions:**
+- `/place_container` - Container place orchestration (move → release → retract)
+
+**Service Clients:**
+- `/gripper/open` - Open gripper to release container
+
+**Action Clients:**
+- `/move_joint_group` - Move manipulator joints
+
+**Configuration:**
+```yaml
+place_container_server:
+  ros__parameters:
+    place_position:
+      base_main_frame_joint: 1.5
+      main_frame_selector_frame_joint: 0.2
+    retract_joint: main_frame_selector_frame_joint
+    retract_distance: 0.10
+    gripper_settle_time: 1.0
+    timeouts:
+      move_timeout: 30.0
+      gripper_timeout: 5.0
+```
+
+**See Also:** [place_container_server.md](../ros_control/place_container_server.md)
+
+---
+
+### 11. rviz2 (Conditional)
 
 **Package:** `rviz2`  
 **Executable:** `rviz2`  
@@ -616,6 +684,11 @@ Controllers and services must be started in a specific order:
    - **Delayed startup:** Waits for `gripper_controller` to be spawned
    - Provides container pick orchestration action
 
+6. **place_container_server** (after gripper_controller)
+   - Needs `gripper_service` and `move_joint_group_server` to be available
+   - **Delayed startup:** Waits for `gripper_controller` to be spawned
+   - Provides container place orchestration action
+
 ### Event Handlers
 
 The launch file uses ROS2 launch event handlers to ensure proper ordering:
@@ -652,6 +725,14 @@ RegisterEventHandler(
         on_exit=[get_container_server_action]
     )
 )
+
+# Start place_container_server after gripper_controller is spawned
+RegisterEventHandler(
+    event_handler=OnProcessExit(
+        target_action=spawn_gripper_controller,
+        on_exit=[place_container_server_action]
+    )
+)
 ```
 
 This ensures:
@@ -659,6 +740,7 @@ This ensures:
 - `move_joint_group_server` starts only after `manipulator_controller` is spawned, guaranteeing controllers are available for discovery
 - `gripper_service` starts only after `gripper_controller` is spawned, guaranteeing the controller topic is available
 - `get_container_server` starts only after `gripper_controller` is spawned, ensuring both `gripper_service` and `move_joint_group_server` are available
+- `place_container_server` starts only after `gripper_controller` is spawned, ensuring both `gripper_service` and `move_joint_group_server` are available
 
 ---
 
@@ -692,6 +774,11 @@ This ensures:
    - Location: `ros_control/config/`
    - Loaded by `get_container_server`
    - Defines: container_position, lift_joint, lift_height, gripper_settle_time, timeouts
+
+6. **`place_container_config.yaml`**
+   - Location: `ros_control/config/`
+   - Loaded by `place_container_server`
+   - Defines: place_position, retract_joint, retract_distance, gripper_settle_time, timeouts
 
 ### RViz Configuration
 
@@ -757,4 +844,5 @@ This ensures:
 - **Unified Control**: `../ros_control/package_structure.md`
 - **Gripper Service**: `../ros_control/gripper_service.md`
 - **GetContainer Server**: `../ros_control/get_container_server.md`
+- **PlaceContainer Server**: `../ros_control/place_container_server.md`
 
