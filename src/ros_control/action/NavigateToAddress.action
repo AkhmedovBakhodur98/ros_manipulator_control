@@ -1,0 +1,25 @@
+# Goal
+# Сторона установки шкафа: "left" или "right"
+string side
+# Номер шкафа (0-4)
+uint8 cabinet_num
+# Ряд внутри шкафа (0-N)
+uint8 row
+# Колонка внутри шкафа (0-1)
+uint8 column
+---
+# Result
+# true если платформа достигла позиции в пределах допуска
+bool success
+# Позиция концевого эффектора [x, y, z] в мировой системе координат
+geometry_msgs/Point final_position
+# Максимальная ошибка позиции среди всех суставов
+float64 position_error
+# Сообщение о результате
+string message
+---
+# Feedback
+# Процент выполнения (0.0 - 1.0)
+float64 progress
+# Текущая фаза: "validating", "computing", "moving", "done"
+string current_phase

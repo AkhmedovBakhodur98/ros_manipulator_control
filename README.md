@@ -47,6 +47,10 @@ ros2 action send_goal /get_container ros_control/action/GetContainer "{}" --feed
 # Place container
 ros2 action send_goal /place_container ros_control/action/PlaceContainer "{}" --feedback
 
+# Navigate to cabinet address
+ros2 action send_goal /navigate_to_address ros_control/action/NavigateToAddress \
+  "{side: 'left', cabinet_num: 2, row: 1, column: 0}" --feedback
+
 # Gripper
 ros2 service call /gripper/open std_srvs/srv/Trigger
 ros2 service call /gripper/close std_srvs/srv/Trigger
@@ -69,13 +73,14 @@ src/
 │   └── launch/                    # display.launch.py, scara_control.launch.py
 │
 ├── ros_control/                   # Unified control interface
-│   ├── action/                    # MoveJointGroup, GetContainer, PlaceContainer
+│   ├── action/                    # MoveJointGroup, GetContainer, PlaceContainer, NavigateToAddress
 │   ├── config/                    # Server configurations
 │   └── src/                       # Server implementations
 │       ├── move_joint_group_server.py
 │       ├── gripper_service.py
 │       ├── get_container_server.py
-│       └── place_container_server.py
+│       ├── place_container_server.py
+│       └── navigate_to_address_server.py
 │
 └── manipulator_bringup/           # System startup
     └── launch/
@@ -91,6 +96,7 @@ src/
 | `/move_joint_group` | `ros_control/action/MoveJointGroup` | Coordinated multi-joint movement |
 | `/get_container` | `ros_control/action/GetContainer` | Container pick (open -> move -> grab -> lift) |
 | `/place_container` | `ros_control/action/PlaceContainer` | Container place (move -> release -> retract) |
+| `/navigate_to_address` | `ros_control/action/NavigateToAddress` | Navigate platform to cabinet address (side, cabinet, row, column) |
 
 ### Services
 
@@ -107,5 +113,6 @@ Full documentation is in the [docs/](docs/) directory:
 - [docs/ros_control/package_structure.md](docs/ros_control/package_structure.md) - Control interface details
 - [docs/ros_control/get_container_server.md](docs/ros_control/get_container_server.md) - Container pick operations
 - [docs/ros_control/place_container_server.md](docs/ros_control/place_container_server.md) - Container place operations
+- [docs/ros_control/navigate_to_address_server.md](docs/ros_control/navigate_to_address_server.md) - Address-based platform navigation
 - [docs/manipulator_bringup/launch_files.md](docs/manipulator_bringup/launch_files.md) - Launch file reference
 - [docs/manipulator_description/package_structure.md](docs/manipulator_description/package_structure.md) - Robot model details

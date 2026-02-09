@@ -18,6 +18,7 @@ The main launch file that starts all infrastructure:
 - Gripper service (`gripper_service`) for simple open/close control
 - Container pick orchestration (`get_container_server`)
 - Container place orchestration (`place_container_server`)
+- Address-based navigation (`navigate_to_address_server`)
 - Optional RViz2 visualization
 
 **Most Common Usage:** Launch with `use_scara:=true` to enable the full system including the SCARA arm. This is the recommended configuration for typical operations.
@@ -128,7 +129,11 @@ ros2 launch manipulator_bringup manipulator_bringup.launch.py rviz:=false
     ├─► Waits for gripper_controller to be spawned
     └─► Provides /place_container action for container place operations
 
-12. Start RViz2 (if rviz:=true)
+12. Start navigate_to_address_server (after manipulator_controller)
+    ├─► Waits for manipulator_controller to be spawned
+    └─► Provides /navigate_to_address action for address-based navigation
+
+13. Start RViz2 (if rviz:=true)
     └─► Loads pre-configured RViz config
 ```
 
@@ -638,7 +643,82 @@ place_container_server:
 
 ---
 
-### 11. rviz2 (Conditional)
+### 11. navigate_to_address_server
+
+**Package:** `ros_control`
+**Executable:** `navigate_to_address_server.py`
+**Purpose:** Translates logical cabinet addresses into physical positions and moves the platform
+
+**Spawned:** After `manipulator_controller` (via event handler)
+
+**Why Delayed Startup:**
+- Requires `move_joint_group_server` to be available (`/move_joint_group` action)
+- Starting after `manipulator_controller` ensures the movement infrastructure is ready
+
+**Parameters:**
+- `use_sim_time` - Use simulation clock
+- `navigate_to_address_config.yaml` - Cabinet geometry and movement configuration
+
+**Node Creation:**
+Uses `OpaqueFunction` similar to other service nodes:
+
+```python
+def create_navigate_to_address_server(context):
+    config_file = str(navigate_to_address_config_file.perform(context))
+    node = Node(
+        package='ros_control',
+        executable='navigate_to_address_server.py',
+        name='navigate_to_address_server',
+        parameters=[
+            {'use_sim_time': use_sim_time_val},
+            config_file
+        ]
+    )
+    return [node]
+```
+
+**Actions:**
+- `/navigate_to_address` - Navigate platform to cabinet address (side, cabinet, row, column)
+
+**Action Clients:**
+- `/move_joint_group` - Move platform joints to computed positions
+
+**Configuration:**
+```yaml
+navigate_to_address_server:
+  ros__parameters:
+    cabinets:
+      num_cabinets: 5
+      rows_per_cabinet: 4
+      columns_per_row: 2
+    rail:
+      first_cabinet_x: 0.2
+      cabinet_spacing: 0.75
+      column_width: 0.35
+    lift:
+      first_row_z: 0.1
+      row_height: 0.30
+    offsets:
+      x: 0.0
+      z: 0.0
+    movement:
+      max_velocity_x: 1.0
+      max_velocity_z: 0.8
+    joint_limits:
+      x_min: 0.0
+      x_max: 4.0
+      z_min: -0.01
+      z_max: 1.5
+    position_tolerance: 0.005
+    timeouts:
+      move_timeout: 30.0
+```
+
+**See Also:** [navigate_to_address_server.md](../ros_control/navigate_to_address_server.md)
+
+---
+
+### 12. rviz2 (Conditional)
 
 **Package:** `rviz2`  
 **Executable:** `rviz2`  
@@ -689,6 +769,11 @@ Controllers and services must be started in a specific order:
    - **Delayed startup:** Waits for `gripper_controller` to be spawned
    - Provides container place orchestration action
 
+7. **navigate_to_address_server** (after manipulator_controller)
+   - Needs `move_joint_group_server` to be available
+   - **Delayed startup:** Waits for `manipulator_controller` to be spawned
+   - Provides address-based platform navigation action
+
 ### Event Handlers
 
 The launch file uses ROS2 launch event handlers to ensure proper ordering:
@@ -733,6 +818,14 @@ RegisterEventHandler(
         on_exit=[place_container_server_action]
     )
 )
+
+# Start navigate_to_address_server after manipulator_controller is spawned
+RegisterEventHandler(
+    event_handler=OnProcessExit(
+        target_action=spawn_manipulator_controller,
+        on_exit=[navigate_to_address_server_action]
+    )
+)
 ```
 
 This ensures:
@@ -741,6 +834,7 @@ This ensures:
 - `gripper_service` starts only after `gripper_controller` is spawned, guaranteeing the controller topic is available
 - `get_container_server` starts only after `gripper_controller` is spawned, ensuring both `gripper_service` and `move_joint_group_server` are available
 - `place_container_server` starts only after `gripper_controller` is spawned, ensuring both `gripper_service` and `move_joint_group_server` are available
+- `navigate_to_address_server` starts only after `manipulator_controller` is spawned, ensuring `move_joint_group_server` is available
 
 ---
 
@@ -779,6 +873,11 @@ This ensures:
    - Location: `ros_control/config/`
    - Loaded by `place_container_server`
    - Defines: place_position, retract_joint, retract_distance, gripper_settle_time, timeouts
+
+7. **`navigate_to_address_config.yaml`**
+   - Location: `ros_control/config/`
+   - Loaded by `navigate_to_address_server`
+   - Defines: cabinet geometry, rail/lift parameters, offsets, movement velocities, joint limits, timeouts
 
 ### RViz Configuration
 
@@ -845,4 +944,5 @@ This ensures:
 - **Gripper Service**: `../ros_control/gripper_service.md`
 - **GetContainer Server**: `../ros_control/get_container_server.md`
 - **PlaceContainer Server**: `../ros_control/place_container_server.md`
+- **NavigateToAddress Server**: `../ros_control/navigate_to_address_server.md`
 

@@ -96,6 +96,7 @@ def generate_launch_description():
     gripper_config_file = PathJoinSubstitution([ros_control_pkg_share, 'config', 'gripper_config.yaml'])
     get_container_config_file = PathJoinSubstitution([ros_control_pkg_share, 'config', 'get_container_config.yaml'])
     place_container_config_file = PathJoinSubstitution([ros_control_pkg_share, 'config', 'place_container_config.yaml'])
+    navigate_to_address_config_file = PathJoinSubstitution([ros_control_pkg_share, 'config', 'navigate_to_address_config.yaml'])
     
     # Launch arguments
     use_sim_time = LaunchConfiguration('use_sim_time')
@@ -393,6 +394,44 @@ def generate_launch_description():
         )
     )
 
+    # NavigateToAddress action server node
+    def create_navigate_to_address_server(context):
+        """Create navigate_to_address_server node with config file parameters"""
+        try:
+            use_sim_time_val = context.launch_configurations.get('use_sim_time', 'false') == 'true'
+            config_file = str(navigate_to_address_config_file.perform(context))
+
+            print(f"[manipulator_bringup] Creating navigate_to_address_server node...")
+            print(f"[manipulator_bringup]   config_file: {config_file}")
+
+            node = Node(
+                package='ros_control',
+                executable='navigate_to_address_server.py',
+                name='navigate_to_address_server',
+                output='screen',
+                parameters=[
+                    {'use_sim_time': use_sim_time_val},
+                    config_file
+                ]
+            )
+            print(f"[manipulator_bringup] navigate_to_address_server node created successfully")
+            return [node]
+        except Exception as e:
+            print(f"[manipulator_bringup] ERROR creating navigate_to_address_server: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+
+    navigate_to_address_server_action = OpaqueFunction(function=create_navigate_to_address_server)
+
+    # Event handler: start navigate_to_address_server after manipulator_controller is spawned
+    delayed_navigate_to_address_server = RegisterEventHandler(
+        event_handler=OnProcessExit(
+            target_action=spawn_manipulator_controller,
+            on_exit=[navigate_to_address_server_action]
+        )
+    )
+
     # RViz2 node (optional)
     rviz_node = Node(
         package='rviz2',
@@ -420,6 +459,7 @@ def generate_launch_description():
         delayed_gripper_service,  # Starts after gripper_controller is spawned
         delayed_get_container_server,  # Starts after gripper_controller is spawned
         delayed_place_container_server,  # Starts after gripper_controller is spawned
+        delayed_navigate_to_address_server,  # Starts after manipulator_controller is spawned
         rviz_node
     ])
 

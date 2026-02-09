@@ -30,8 +30,12 @@ Unified control interface with action servers and services.
 - `src/move_joint_group_server.py` - Joint group action server
 - `src/gripper_service.py` - Gripper open/close services
 - `src/get_container_server.py` - Container pick orchestration action server
+- `src/place_container_server.py` - Container place orchestration action server
+- `src/navigate_to_address_server.py` - Address-based platform navigation action server
 - `action/MoveJointGroup.action` - Joint movement action definition
 - `action/GetContainer.action` - Container pick action definition
+- `action/PlaceContainer.action` - Container place action definition
+- `action/NavigateToAddress.action` - Address-based navigation action definition
 - `config/` - Server configurations
 
 ### scara_description

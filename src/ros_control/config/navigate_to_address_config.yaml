@@ -1,0 +1,54 @@
+navigate_to_address_server:
+  ros__parameters:
+    # ============================================================
+    # Cabinet geometry
+    # ============================================================
+    cabinets:
+      num_cabinets: 5           # Number of cabinets per side (0-4)
+      rows_per_cabinet: 4       # Number of rows per cabinet (0-3)
+      columns_per_row: 2        # Number of columns per row (0-1)
+
+    # ============================================================
+    # X axis (rail) - base_main_frame_joint
+    # ============================================================
+    rail:
+      first_cabinet_x: 0.2     # [TEST] X position of cabinet_0, column_0 center [m]
+      cabinet_spacing: 0.75    # [TEST] X distance between adjacent cabinet centers [m]
+      column_width: 0.35       # [TEST] X distance between column_0 and column_1 [m]
+
+    # ============================================================
+    # Z axis (vertical lift) - main_frame_selector_frame_joint
+    # ============================================================
+    lift:
+      first_row_z: 0.1         # [TEST] Z position of row_0 center [m]
+      row_height: 0.30         # [TEST] Z distance between adjacent rows [m]
+
+    # ============================================================
+    # Fine-tuning offsets (applied after formula computation)
+    # ============================================================
+    offsets:
+      x: 0.0                   # Global X correction [m]
+      z: 0.0                   # Global Z correction [m]
+
+    # ============================================================
+    # Movement parameters
+    # ============================================================
+    movement:
+      max_velocity_x: 1.0      # Max rail velocity [m/s]
+      max_velocity_z: 0.8      # Max lift velocity [m/s]
+
+    # ============================================================
+    # Joint limits (from URDF)
+    # ============================================================
+    joint_limits:
+      x_min: 0.0
+      x_max: 4.0
+      z_min: -0.01
+      z_max: 1.5
+
+    # ============================================================
+    # Tolerances and timeouts
+    # ============================================================
+    position_tolerance: 0.005   # Acceptable position error [m]
+    timeouts:
+      move_timeout: 30.0        # Timeout for move_joint_group action [s]
