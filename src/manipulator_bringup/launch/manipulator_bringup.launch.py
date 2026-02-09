@@ -55,6 +55,13 @@ def get_controller_joints(manip_controllers_file, scara_controllers_file, use_sc
                 if joints:
                     controller_joints['manipulator_controller'] = joints
         
+        # Extract picker_z_controller joints
+        if 'picker_z_controller' in manip_config:
+            if 'ros__parameters' in manip_config['picker_z_controller']:
+                joints = manip_config['picker_z_controller']['ros__parameters'].get('joints', [])
+                if joints:
+                    controller_joints['picker_z_controller'] = joints
+
         # Extract gripper_controller joints
         if 'gripper_controller' in manip_config:
             if 'ros__parameters' in manip_config['gripper_controller']:
@@ -173,6 +180,14 @@ def generate_launch_description():
         output='screen'
     )
 
+    # Spawn picker_z_controller (after joint_state_broadcaster)
+    spawn_picker_z_controller = Node(
+        package='controller_manager',
+        executable='spawner',
+        arguments=['picker_z_controller', '--controller-manager', '/controller_manager'],
+        output='screen'
+    )
+
     # Spawn gripper_controller (after joint_state_broadcaster)
     spawn_gripper_controller = Node(
         package='controller_manager',
@@ -180,7 +195,7 @@ def generate_launch_description():
         arguments=['gripper_controller', '--controller-manager', '/controller_manager'],
         output='screen'
     )
-    
+
     # Event handler: spawn manipulator_controller after joint_state_broadcaster is active
     delayed_manipulator_controller = RegisterEventHandler(
         event_handler=OnProcessExit(
@@ -188,7 +203,15 @@ def generate_launch_description():
             on_exit=[spawn_manipulator_controller]
         )
     )
-    
+
+    # Event handler: spawn picker_z_controller after joint_state_broadcaster is active
+    delayed_picker_z_controller = RegisterEventHandler(
+        event_handler=OnProcessExit(
+            target_action=spawn_joint_state_broadcaster,
+            on_exit=[spawn_picker_z_controller]
+        )
+    )
+
     # Event handler: spawn gripper_controller after joint_state_broadcaster is active
     delayed_gripper_controller = RegisterEventHandler(
         event_handler=OnProcessExit(
@@ -453,6 +476,7 @@ def generate_launch_description():
         controller_manager_node,
         spawn_joint_state_broadcaster,
         delayed_manipulator_controller,
+        delayed_picker_z_controller,
         delayed_gripper_controller,
         delayed_scara_controller,
         delayed_move_joint_group_server,  # Starts after manipulator_controller is spawned

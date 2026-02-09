@@ -658,6 +658,7 @@ controller_joints:
   manipulator_controller:
     - base_main_frame_joint
     - main_frame_selector_frame_joint
+  picker_z_controller:
     - selector_frame_picker_frame_joint
   scara_controller:
     - scara_shoulder_joint
@@ -676,7 +677,7 @@ controller_joints:
 ros2 launch ros_control move_joint_group_server.launch.py
 ```
 
-**Move manipulator joints:**
+**Move platform + picker joints:**
 ```bash
 ros2 action send_goal /move_joint_group \
   ros_control/action/MoveJointGroup "{
@@ -689,6 +690,8 @@ ros2 action send_goal /move_joint_group \
     max_velocity: [0.5, 0.3, 0.2]
   }"
 ```
+
+> Note: `move_joint_group_server` automatically discovers that `base_main_frame_joint` and `main_frame_selector_frame_joint` belong to `manipulator_controller`, while `selector_frame_picker_frame_joint` belongs to `picker_z_controller`, and sends goals to both controllers.
 
 **Move SCARA arm:**
 ```bash

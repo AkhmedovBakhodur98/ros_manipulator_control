@@ -729,7 +729,7 @@ On any failure:
 
 **Example JSON value:**
 ```json
-{"manipulator_controller": ["base_main_frame_joint", "main_frame_selector_frame_joint", "selector_frame_picker_frame_joint"], "scara_controller": ["scara_shoulder_joint", "scara_elbow_joint", "scara_wrist_joint"]}
+{"manipulator_controller": ["base_main_frame_joint", "main_frame_selector_frame_joint"], "picker_z_controller": ["selector_frame_picker_frame_joint"], "scara_controller": ["scara_shoulder_joint", "scara_elbow_joint", "scara_wrist_joint"]}
 ```
 
 **Parsed structure:**
@@ -737,7 +737,9 @@ On any failure:
 {
     'manipulator_controller': [
         'base_main_frame_joint',
-        'main_frame_selector_frame_joint',
+        'main_frame_selector_frame_joint'
+    ],
+    'picker_z_controller': [
         'selector_frame_picker_frame_joint'
     ],
     'scara_controller': [

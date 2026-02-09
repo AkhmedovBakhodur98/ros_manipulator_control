@@ -170,7 +170,9 @@ The launch file includes a Python helper function that:
    controller_joints = {
      'manipulator_controller': [
        'base_main_frame_joint',
-       'main_frame_selector_frame_joint',
+       'main_frame_selector_frame_joint'
+     ],
+     'picker_z_controller': [
        'selector_frame_picker_frame_joint'
      ],
      'gripper_controller': [
@@ -209,6 +211,10 @@ manipulator_controller:
     joints:
       - base_main_frame_joint
       - main_frame_selector_frame_joint
+
+picker_z_controller:
+  ros__parameters:
+    joints:
       - selector_frame_picker_frame_joint
 
 gripper_controller:
@@ -304,7 +310,7 @@ The following controllers are **not** included in the mapping:
 **Package:** `controller_manager`  
 **Executable:** `spawner`  
 **Arguments:** `['manipulator_controller', '--controller-manager', '/controller_manager']`  
-**Purpose:** Trajectory control for main manipulator axes
+**Purpose:** Trajectory control for platform axes (X rail + Z lift)
 
 **Spawned:** After `joint_state_broadcaster` (via event handler)
 
@@ -313,14 +319,32 @@ The following controllers are **not** included in the mapping:
 **Joints:**
 - `base_main_frame_joint` - X-axis rail movement
 - `main_frame_selector_frame_joint` - Z-axis vertical lift
-- `selector_frame_picker_frame_joint` - Z-axis picker movement
 
 **Actions:**
 - `/manipulator_controller/follow_joint_trajectory` - Execute trajectory
 
 ---
 
-### 5. gripper_controller
+### 5. picker_z_controller
+
+**Package:** `controller_manager`
+**Executable:** `spawner`
+**Arguments:** `['picker_z_controller', '--controller-manager', '/controller_manager']`
+**Purpose:** Trajectory control for picker Z axis (dedicated for scara_control use)
+
+**Spawned:** After `joint_state_broadcaster` (via event handler)
+
+**Type:** `joint_trajectory_controller/JointTrajectoryController`
+
+**Joints:**
+- `selector_frame_picker_frame_joint` - Z-axis picker movement
+
+**Actions:**
+- `/picker_z_controller/follow_joint_trajectory` - Execute trajectory
+
+---
+
+### 6. gripper_controller
 
 **Package:** `controller_manager`  
 **Executable:** `spawner`  

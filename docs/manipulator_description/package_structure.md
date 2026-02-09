@@ -127,12 +127,15 @@ controller_manager:
 | Controller | Type | Purpose |
 |------------|------|---------|
 | `joint_state_broadcaster` | JointStateBroadcaster | Publishes joint states to `/joint_states` |
-| `manipulator_controller` | JointTrajectoryController | Trajectory control for main axes |
+| `manipulator_controller` | JointTrajectoryController | Trajectory control for platform axes |
+| `picker_z_controller` | JointTrajectoryController | Trajectory control for picker Z axis |
 | `gripper_controller` | ForwardCommandController | Direct position control for gripper jaws |
 
-**Manipulator Controller Joints (3):**
+**Manipulator Controller Joints (2):**
 - `base_main_frame_joint` - X-axis rail movement
 - `main_frame_selector_frame_joint` - Z-axis vertical lift
+
+**Picker Z Controller Joints (1):**
 - `selector_frame_picker_frame_joint` - Z-axis picker movement
 
 **Gripper Controller Joints (2):**
@@ -501,14 +504,27 @@ When running `manipulator_control.launch.py`:
 
 ### Usage Examples
 
-**Move main axes (trajectory):**
+**Move platform axes (trajectory):**
 ```bash
 ros2 action send_goal /manipulator_controller/follow_joint_trajectory \
   control_msgs/action/FollowJointTrajectory "{
     trajectory: {
-      joint_names: [base_main_frame_joint, main_frame_selector_frame_joint, selector_frame_picker_frame_joint],
+      joint_names: [base_main_frame_joint, main_frame_selector_frame_joint],
       points: [
-        {positions: [1.5, 0.5, 0.1], time_from_start: {sec: 2, nanosec: 0}}
+        {positions: [1.5, 0.5], time_from_start: {sec: 2, nanosec: 0}}
+      ]
+    }
+  }"
+```
+
+**Move picker Z axis:**
+```bash
+ros2 action send_goal /picker_z_controller/follow_joint_trajectory \
+  control_msgs/action/FollowJointTrajectory "{
+    trajectory: {
+      joint_names: [selector_frame_picker_frame_joint],
+      points: [
+        {positions: [0.15], time_from_start: {sec: 1, nanosec: 0}}
       ]
     }
   }"
