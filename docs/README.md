@@ -1,6 +1,6 @@
 # Documentation Overview
 
-This directory contains comprehensive documentation for the manipulator ROS2 control system, including the main manipulator, SCARA arm, unified control interface, and system bringup.
+This directory contains comprehensive documentation for the manipulator ROS2 control system, including the main manipulator, SCARA arm, SCARA control library, unified control interface, and system bringup.
 
 ---
 
@@ -21,6 +21,10 @@ docs/
 │   ├── integration.md                     # Integration with other robots
 │   ├── package_structure.md               # Package structure and files
 │   └── ros2_control.md                    # ros2_control integration
+├── scara_control/                         # SCARA arm control library documentation
+│   ├── scara_client_architecture.md       # Architectural design document
+│   ├── package_structure.md               # Package structure and files
+│   └── scara_client.md                    # ScaraClient implementation details
 ├── ros_control/                           # Unified control interface documentation
 │   ├── package_structure.md               # Package structure and files
 │   ├── move_joint_group_server.md         # Joint movement action server
@@ -53,6 +57,8 @@ docs/
 - [manipulator_description/yaml_to_urdf.md](manipulator_description/yaml_to_urdf.md) - Understand parameter system
 
 **Control:**
+- [scara_control/package_structure.md](scara_control/package_structure.md) - SCARA arm control library (ScaraClient)
+- [scara_control/scara_client.md](scara_control/scara_client.md) - ScaraClient implementation details
 - [ros_control/move_joint_group_server.md](ros_control/move_joint_group_server.md) - Unified joint movement
 - [ros_control/gripper_service.md](ros_control/gripper_service.md) - Gripper open/close control
 - [ros_control/get_container_server.md](ros_control/get_container_server.md) - Container pick operations
@@ -199,6 +205,48 @@ docs/
 
 ---
 
+## SCARA Control Library Documentation
+
+### [package_structure.md](scara_control/package_structure.md)
+**Purpose:** Complete overview of the scara_control package — reusable SCARA arm control library.
+
+**Contents:**
+- Package organization and file descriptions
+- Two-controller architecture (SCARA + optional Z-axis)
+- Configuration reference (scara_client section in scara_params.yaml)
+- ROS2 interfaces (topics, actions, services)
+- Usage examples (move joints, IK, pick/place, linear motion)
+- Build and verify instructions
+
+**When to read:** First document to read for using the ScaraClient library. Essential for integrators.
+
+---
+
+### [scara_client.md](scara_control/scara_client.md)
+**Purpose:** Detailed implementation documentation for the ScaraClient class.
+
+**Contents:**
+- Data types (ScaraResult, ElbowConfig, CartesianPose, IKSolution, IKDiagnostic)
+- Exceptions and error handling strategy
+- Constructor and config auto-discovery
+- State queries (joint positions, TCP position, elbow config)
+- Kinematics (FK, IK, reachability, IK diagnostics)
+- Motion methods (move_joints, move_z, move_to_point, move_linear, move_linear_with_flip, move_home)
+- Tool control (trigger_tool, pick_at, place_at)
+- Implementation patterns (thread safety, async action client, trajectory points)
+- SCARA arm specification and velocity reference
+
+**When to read:** When you need to understand ScaraClient internals, extend behavior, or debug motion issues.
+
+---
+
+### [scara_client_architecture.md](scara_control/scara_client_architecture.md)
+**Purpose:** Architectural design document for the ScaraClient class.
+
+**When to read:** When you need to understand design decisions, IK equations, or the elbow flip algorithm.
+
+---
+
 ## ROS Control Documentation
 
 ### [package_structure.md](ros_control/package_structure.md)
@@ -329,7 +377,11 @@ docs/
 - Read [scara_description/configuration.md](scara_description/configuration.md)
 - Reference [manipulator_description/yaml_to_urdf.md](manipulator_description/yaml_to_urdf.md) for parameter system details
 
-**...control SCARA programmatically:**
+**...control SCARA programmatically (high-level library):**
+- Read [scara_control/package_structure.md](scara_control/package_structure.md) for quick start
+- Read [scara_control/scara_client.md](scara_control/scara_client.md) for full API details
+
+**...control SCARA via low-level ros2_control:**
 - Read [scara_description/ros2_control.md](scara_description/ros2_control.md)
 
 **...understand coordinate frames:**
@@ -383,6 +435,13 @@ manipulator_description (robot model)
     └── scara_description (optional module)
         └── SCARA arm (3-DOF arm)
             └── Attaches to picker_frame
+
+scara_control (SCARA arm control library)
+    │
+    └── ScaraClient              ── High-level SCARA API
+        ├── IK/FK, linear motion, elbow flip
+        ├── Optional Z-axis control
+        └── Tool trigger (pick/place)
 
 ros_control (unified control interface)
     │
@@ -464,7 +523,7 @@ ros2 service call /gripper/close std_srvs/srv/Trigger
 
 - `src/manipulator_description/config/manipulator_params.yaml` - Main manipulator parameters
 - `src/manipulator_description/config/manipulator_controllers.yaml` - Manipulator controllers
-- `src/scara_description/config/scara_params.yaml` - SCARA parameters
+- `src/scara_description/config/scara_params.yaml` - SCARA parameters + ScaraClient config
 - `src/scara_description/config/scara_controllers.yaml` - SCARA controllers
 - `src/ros_control/config/move_joint_group_config.yaml` - Joint movement server config
 - `src/ros_control/config/gripper_config.yaml` - Gripper service config

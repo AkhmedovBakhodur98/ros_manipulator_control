@@ -134,3 +134,53 @@ joints:
   tool_to_tcp_joint:
     type: "fixed"
     origin: {xyz: [0, 0, -0.2], rpy: [0, 0, 0]}  # TCP offset
+
+# ============================================================================
+# SCARA CLIENT CONFIGURATION
+# ============================================================================
+scara_client:
+  # SCARA controller (always required)
+  controller_action: "/scara_controller/follow_joint_trajectory"
+  joint_states_topic: "/joint_states"
+  position_tolerance: 0.01    # rad
+  timeout: 30.0               # seconds
+
+  # Z-axis configuration (optional)
+  z_axis:
+    enabled: true
+    joint_name: "selector_frame_picker_frame_joint"
+    controller_action: "/picker_z_controller/follow_joint_trajectory"
+    limits: {lower: -0.01, upper: 0.3, velocity: 1.0}
+
+  # Tool configuration (optional)
+  tool:
+    type: "service"
+    activate: "/scara_tool/activate"
+    deactivate: "/scara_tool/deactivate"
+    service_type: "std_srvs/srv/Trigger"
+    settle_time: 0.5
+
+  # Home position
+  home:
+    shoulder: 0.0
+    elbow: 0.0
+    wrist: 0.0
+    z: 0.0
+
+  # Elbow flip configuration (for move_linear_with_flip)
+  elbow_flip:
+    enabled: true
+    joint_limit_margin: 0.15      # rad — trigger flip this far from elbow limit
+    flip_duration: 1.5            # seconds for the flip motion
+    z_unhook_offset: 0.03         # m — Z raise before flip
+
+  # Linear motion parameters
+  linear_motion:
+    max_deviation: 0.005          # m (5mm) — max FK deviation from straight line
+
+  # Default motion parameters
+  defaults:
+    velocity_scaling: 0.5
+    linear_velocity: 0.1          # m/s
+    linear_step_size: 0.005       # m
+    elbow_up: true
