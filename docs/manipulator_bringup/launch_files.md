@@ -110,6 +110,7 @@ ros2 launch manipulator_bringup manipulator_bringup.launch.py rviz:=false
 7. Spawn Controllers (in order)
    ├─► joint_state_broadcaster (first)
    ├─► manipulator_controller (after broadcaster)
+   │     └─► picker_z_controller (after manipulator_controller)
    ├─► gripper_controller (after broadcaster)
    └─► scara_controller (after broadcaster, if use_scara)
 
@@ -332,12 +333,15 @@ The following controllers are **not** included in the mapping:
 **Arguments:** `['picker_z_controller', '--controller-manager', '/controller_manager']`
 **Purpose:** Trajectory control for picker Z axis (dedicated for scara_control use)
 
-**Spawned:** After `joint_state_broadcaster` (via event handler)
+**Spawned:** After `manipulator_controller` (chained via event handler to avoid spawner race condition)
 
 **Type:** `joint_trajectory_controller/JointTrajectoryController`
 
 **Joints:**
 - `selector_frame_picker_frame_joint` - Z-axis picker movement
+
+**Why chained to manipulator_controller (not joint_state_broadcaster):**
+When multiple spawners trigger simultaneously on the same event (`joint_state_broadcaster` exit), the `controller_manager` service can silently drop requests due to a race condition. Chaining `picker_z_controller` to spawn after `manipulator_controller` ensures it gets a dedicated service slot and spawns reliably.
 
 **Actions:**
 - `/picker_z_controller/follow_joint_trajectory` - Execute trajectory
@@ -768,10 +772,10 @@ Controllers and services must be started in a specific order:
    - Publishes joint states
 
 2. **Control controllers** (after broadcaster)
-   - `manipulator_controller`
-   - `gripper_controller`
-   - `scara_controller` (if enabled)
-   - These can be spawned in parallel (no dependencies between them)
+   - `manipulator_controller` (after broadcaster)
+   - `picker_z_controller` (after manipulator_controller — chained to avoid spawner race)
+   - `gripper_controller` (after broadcaster)
+   - `scara_controller` (after broadcaster, if enabled)
 
 3. **move_joint_group_server** (after manipulator_controller)
    - Needs controllers to be active for discovery
@@ -808,6 +812,15 @@ RegisterEventHandler(
     event_handler=OnProcessExit(
         target_action=spawn_joint_state_broadcaster,
         on_exit=[spawn_manipulator_controller]
+    )
+)
+
+# Spawn picker_z_controller after manipulator_controller
+# (chained to avoid race condition with simultaneous spawners)
+RegisterEventHandler(
+    event_handler=OnProcessExit(
+        target_action=spawn_manipulator_controller,
+        on_exit=[spawn_picker_z_controller]
     )
 )
 
@@ -852,8 +865,27 @@ RegisterEventHandler(
 )
 ```
 
+**Spawner chain diagram:**
+
+```
+joint_state_broadcaster exits
+  ├── manipulator_controller
+  │     ├── picker_z_controller  (chained — avoids spawner race)
+  │     ├── move_joint_group_server
+  │     └── navigate_to_address_server
+  ├── gripper_controller
+  │     ├── gripper_service
+  │     ├── get_container_server
+  │     └── place_container_server
+  └── scara_controller (if use_scara)
+```
+
+**Why picker_z_controller is chained to manipulator_controller:**
+When multiple spawner processes trigger simultaneously on the same `OnProcessExit` event, the `controller_manager` service can silently fail to process all requests due to a race condition. By chaining `picker_z_controller` to spawn after `manipulator_controller` completes, it gets a dedicated service slot and spawns reliably.
+
 This ensures:
 - Controllers are spawned only after `joint_state_broadcaster` is active
+- `picker_z_controller` spawns reliably after `manipulator_controller` (avoids race condition)
 - `move_joint_group_server` starts only after `manipulator_controller` is spawned, guaranteeing controllers are available for discovery
 - `gripper_service` starts only after `gripper_controller` is spawned, guaranteeing the controller topic is available
 - `get_container_server` starts only after `gripper_controller` is spawned, ensuring both `gripper_service` and `move_joint_group_server` are available

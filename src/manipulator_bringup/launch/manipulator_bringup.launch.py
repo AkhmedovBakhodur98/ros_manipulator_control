@@ -204,10 +204,11 @@ def generate_launch_description():
         )
     )
 
-    # Event handler: spawn picker_z_controller after joint_state_broadcaster is active
+    # Event handler: spawn picker_z_controller after manipulator_controller is spawned
+    # (chained to avoid race condition with simultaneous spawners)
     delayed_picker_z_controller = RegisterEventHandler(
         event_handler=OnProcessExit(
-            target_action=spawn_joint_state_broadcaster,
+            target_action=spawn_manipulator_controller,
             on_exit=[spawn_picker_z_controller]
         )
     )
