@@ -14,19 +14,28 @@ src/ros_control/
 ├── action/
 │   ├── MoveJointGroup.action         # Joint movement action definition
 │   ├── GetContainer.action           # Container pick action definition
-│   └── PlaceContainer.action         # Container place action definition
+│   ├── PlaceContainer.action         # Container place action definition
+│   ├── NavigateToAddress.action      # Address-based navigation action definition
+│   └── ExtractBox.action             # Box extraction action definition
+├── msg/
+│   └── Address.msg                   # Cabinet cell address message
 ├── config/
 │   ├── move_joint_group_config.yaml  # MoveJointGroup server configuration
 │   ├── gripper_config.yaml           # Gripper service configuration
 │   ├── get_container_config.yaml     # GetContainer server configuration
-│   └── place_container_config.yaml   # PlaceContainer server configuration
+│   ├── place_container_config.yaml   # PlaceContainer server configuration
+│   ├── navigate_to_address_config.yaml  # NavigateToAddress server configuration
+│   └── extract_box_config.yaml       # ExtractBox server configuration
 ├── launch/
-│   └── move_joint_group_server.launch.py  # Launch file for the action server
+│   ├── move_joint_group_server.launch.py  # Launch file for MoveJointGroup action server
+│   └── extract_box_server.launch.py       # Launch file for ExtractBox action server
 └── src/
     ├── move_joint_group_server.py    # Joint movement action server
     ├── gripper_service.py            # Gripper open/close services
     ├── get_container_server.py       # Container pick orchestration server
-    └── place_container_server.py     # Container place orchestration server
+    ├── place_container_server.py     # Container place orchestration server
+    ├── navigate_to_address_server.py # Address-based platform navigation server
+    └── extract_box_server.py         # Box extraction orchestration server
 ```
 
 ---
@@ -39,8 +48,8 @@ src/ros_control/
 CMake build configuration for the ROS2 package.
 
 **Key sections:**
-- **Action generation**: Generates ROS2 action interfaces from `MoveJointGroup.action`, `GetContainer.action`, `PlaceContainer.action`
-- **Python script installation**: Installs `move_joint_group_server.py`, `gripper_service.py`, `get_container_server.py`, `place_container_server.py` as executables
+- **Action/message generation**: Generates ROS2 interfaces from `MoveJointGroup.action`, `GetContainer.action`, `PlaceContainer.action`, `NavigateToAddress.action`, `ExtractBox.action`, `Address.msg`
+- **Python script installation**: Installs `move_joint_group_server.py`, `gripper_service.py`, `get_container_server.py`, `place_container_server.py`, `navigate_to_address_server.py`, `extract_box_server.py` as executables
 - **Resource installation**: Installs `config/` and `launch/` directories
 
 **Dependencies:**
@@ -184,6 +193,64 @@ float32 progress_percentage # Progress (0-100%)
 ros2 action send_goal /place_container ros_control/action/PlaceContainer "{}" --feedback
 ```
 
+#### `action/NavigateToAddress.action`
+Defines the action interface for address-based platform navigation.
+
+**Goal (Request):**
+```yaml
+string side           # Cabinet side: "left" or "right"
+uint8 cabinet_num     # Cabinet number (0-based)
+uint8 row             # Row within cabinet (0-based)
+uint8 column          # Column within cabinet (0-based)
+```
+
+**Result (Response):**
+```yaml
+bool success                          # True if platform reached position
+geometry_msgs/Point final_position    # End-effector position [x, y, z] in world frame
+float64 position_error                # Maximum position error across all joints
+string message                        # Result message
+```
+
+**Feedback (Progress Updates):**
+```yaml
+float64 progress      # Progress (0.0 - 1.0)
+string current_phase  # "validating", "computing", "moving", "done"
+```
+
+#### `action/ExtractBox.action`
+Defines the action interface for box extraction from a cabinet cell.
+
+**Goal (Request):**
+```yaml
+ros_control/Address box   # Target cell address
+```
+
+**Result (Response):**
+```yaml
+bool success              # True if box successfully extracted
+bool box_extracted        # True if extraction sensor triggered (mock: always true)
+string box_id             # Box ID (format: box_{side[0]}_{cabinet}_{row}_{col})
+float64 execution_time    # Total execution time (seconds)
+string message            # Result message
+```
+
+**Feedback (Progress Updates):**
+```yaml
+string current_phase         # "navigating", "extracting", "done"
+float32 progress_percentage  # 0-100%
+```
+
+#### `msg/Address.msg`
+Message type representing a cabinet cell address.
+
+```yaml
+string side       # Cabinet side: "left" or "right"
+uint8 cabinet_num # Cabinet number (0-based)
+uint8 row         # Row within cabinet (0-based)
+uint8 column      # Column within cabinet (0-based)
+```
+
 ---
 
 ### Configuration Files
@@ -304,6 +371,30 @@ place_container_server:
       move_timeout: 30.0
       gripper_timeout: 5.0
 ```
+
+#### `config/navigate_to_address_config.yaml`
+Configuration file for the NavigateToAddress action server. Contains cabinet layout parameters and motion settings for platform navigation.
+
+#### `config/extract_box_config.yaml`
+Configuration file for the ExtractBox action server.
+
+**Configuration Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `hook_grasp.wrist_angle_rad` | float | 1.5708 | Hook orientation angle (sign auto from side) |
+| `hook_grasp.z_offset_m` | float | 0.03 | Raise/lower distance to clear handle plate |
+| `hook_grasp.approach_depth_m` | float | 0.20 | How far arm reaches into cabinet (Y axis) |
+| `hook_grasp.approach_x_offset_m` | float | 0.20 | X offset — keeps approach within shoulder limits |
+| `hook_grasp.y_inside_m` | float | 0.02 | Extra depth inside box edge |
+| `hook_grasp.z_lower_velocity` | float | 0.05 | Z lowering velocity (m/s) |
+| `motion.approach_velocity` | float | 0.5 | Velocity scaling for approach |
+| `motion.retract_velocity` | float | 0.05 | Velocity for linear retraction (m/s) |
+| `motion.linear_step_size` | float | 0.005 | Step size for linear retraction (m) |
+| `motion.return_home` | bool | true | If true, arm returns to home after retract |
+| `timeouts.navigate_timeout` | float | 60.0 | NavigateToAddress timeout (seconds) |
+| `timeouts.extract_timeout` | float | 30.0 | SCARA extraction timeout (seconds) |
+| `sensor.mock` | bool | true | Use mock sensor (always returns true) |
 
 ---
 
@@ -473,6 +564,51 @@ High-level action server for container place operations (reverse of GetContainer
 
 **See detailed documentation:** [place_container_server.md](place_container_server.md)
 
+#### `src/navigate_to_address_server.py`
+Action server for address-based platform navigation.
+
+**Class: `NavigateToAddressServer`**
+
+**Key Features:**
+- Translates cabinet cell address (side, cabinet, row, column) into joint positions
+- Coordinates platform movement via MoveJointGroup action
+- Computes end-effector position using forward kinematics
+
+**Dependencies:**
+
+| Interface | Type | Purpose |
+|-----------|------|---------|
+| `/move_joint_group` | Action | Move platform joints to target |
+
+#### `src/extract_box_server.py`
+High-level action server orchestrating box extraction from a cabinet cell.
+
+**Class: `ExtractBoxServer`**
+
+**Key Features:**
+- Coordinates NavigateToAddress and ScaraClient for full extraction sequence
+- 3-phase execution: navigate (0-40%), extract with SCARA (40-90%), verify (90-100%)
+- Uses TF2 for picker_frame transform lookup
+- Supports cancellation at phase boundaries
+
+**Dependencies:**
+
+| Interface | Type | Purpose |
+|-----------|------|---------|
+| `/navigate_to_address` | Action | Navigate platform to target cell |
+| `ScaraClient` | Library | SCARA arm movement (wrist, Z, approach, retract, home) |
+| `picker_frame` TF | Transform | SCARA base position in world frame |
+
+**Execution Flow:**
+1. Navigate to cell (NavigateToAddress action)
+2. Rotate wrist for hook orientation
+3. Raise Z to clear handle plate
+4. Approach — extend arm into cabinet
+5. Lower Z — hook drops into gap
+6. Retract — pull box out linearly
+7. Return home (optional)
+8. Verify with box sensor
+
 ---
 
 ### Launch Files
@@ -485,6 +621,14 @@ Launch file for starting the MoveJointGroup action server.
 **Quick Summary:**
 - Launches `move_joint_group_server.py` node
 - Loads configuration from `config/move_joint_group_config.yaml`
+- Supports `use_sim_time` parameter for simulation
+
+#### `launch/extract_box_server.launch.py`
+Launch file for starting the ExtractBox action server standalone.
+
+**Quick Summary:**
+- Launches `extract_box_server.py` node
+- Loads configuration from `config/extract_box_config.yaml`
 - Supports `use_sim_time` parameter for simulation
 
 ---
@@ -632,6 +776,8 @@ Launch file for starting the MoveJointGroup action server.
 | `/move_joint_group` | `ros_control/action/MoveJointGroup` | `move_joint_group_server` | Coordinated joint movement |
 | `/get_container` | `ros_control/action/GetContainer` | `get_container_server` | Container pick orchestration |
 | `/place_container` | `ros_control/action/PlaceContainer` | `place_container_server` | Container place orchestration |
+| `/navigate_to_address` | `ros_control/action/NavigateToAddress` | `navigate_to_address_server` | Address-based platform navigation |
+| `/extract_box` | `ros_control/action/ExtractBox` | `extract_box_server` | Box extraction orchestration |
 
 ### Action Clients
 
@@ -640,6 +786,8 @@ Launch file for starting the MoveJointGroup action server.
 | `/{controller_name}/follow_joint_trajectory` | `control_msgs/action/FollowJointTrajectory` | `move_joint_group_server` | Trajectory controllers |
 | `/move_joint_group` | `ros_control/action/MoveJointGroup` | `get_container_server` | Joint movement |
 | `/move_joint_group` | `ros_control/action/MoveJointGroup` | `place_container_server` | Joint movement |
+| `/move_joint_group` | `ros_control/action/MoveJointGroup` | `navigate_to_address_server` | Platform movement |
+| `/navigate_to_address` | `ros_control/action/NavigateToAddress` | `extract_box_server` | Cell navigation |
 
 ---
 

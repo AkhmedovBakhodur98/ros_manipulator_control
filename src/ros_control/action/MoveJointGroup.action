@@ -29,3 +29,4 @@ float64[] target_positions
 # Процент выполнения (0-100)
 float32 progress_percentage
 
+

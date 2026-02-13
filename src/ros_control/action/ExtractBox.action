@@ -1,0 +1,13 @@
+# Goal
+ros_control/Address box   # Target cell address
+---
+# Result
+bool success              # true if box successfully extracted
+bool box_extracted        # true if extraction sensor triggered (mock: always true)
+string box_id             # Box ID (format: box_{side[0]}_{cabinet}_{row}_{col})
+float64 execution_time    # Total execution time (seconds)
+string message            # Result message
+---
+# Feedback
+string current_phase      # "navigating", "extracting", "done"
+float32 progress_percentage  # 0-100%

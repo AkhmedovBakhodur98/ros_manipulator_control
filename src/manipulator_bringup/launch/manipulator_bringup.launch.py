@@ -104,7 +104,8 @@ def generate_launch_description():
     get_container_config_file = PathJoinSubstitution([ros_control_pkg_share, 'config', 'get_container_config.yaml'])
     place_container_config_file = PathJoinSubstitution([ros_control_pkg_share, 'config', 'place_container_config.yaml'])
     navigate_to_address_config_file = PathJoinSubstitution([ros_control_pkg_share, 'config', 'navigate_to_address_config.yaml'])
-    
+    extract_box_config_file = PathJoinSubstitution([ros_control_pkg_share, 'config', 'extract_box_config.yaml'])
+
     # Launch arguments
     use_sim_time = LaunchConfiguration('use_sim_time')
     use_rviz = LaunchConfiguration('rviz')
@@ -456,6 +457,46 @@ def generate_launch_description():
         )
     )
 
+    # ExtractBox action server node (requires NavigateToAddress + ScaraClient)
+    def create_extract_box_server(context):
+        """Create extract_box_server node with config file parameters"""
+        try:
+            use_sim_time_val = context.launch_configurations.get('use_sim_time', 'false') == 'true'
+            config_file = str(extract_box_config_file.perform(context))
+
+            print(f"[manipulator_bringup] Creating extract_box_server node...")
+            print(f"[manipulator_bringup]   config_file: {config_file}")
+
+            node = Node(
+                package='ros_control',
+                executable='extract_box_server.py',
+                name='extract_box_server',
+                output='screen',
+                parameters=[
+                    {'use_sim_time': use_sim_time_val},
+                    config_file
+                ],
+                condition=IfCondition(use_scara)
+            )
+            print(f"[manipulator_bringup] extract_box_server node created successfully")
+            return [node]
+        except Exception as e:
+            print(f"[manipulator_bringup] ERROR creating extract_box_server: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+
+    extract_box_server_action = OpaqueFunction(function=create_extract_box_server)
+
+    # Event handler: start extract_box_server after scara_controller is spawned
+    # (ExtractBox depends on both NavigateToAddress and ScaraClient, which needs scara_controller)
+    delayed_extract_box_server = RegisterEventHandler(
+        event_handler=OnProcessExit(
+            target_action=spawn_scara_controller,
+            on_exit=[extract_box_server_action]
+        )
+    )
+
     # RViz2 node (optional)
     rviz_node = Node(
         package='rviz2',
@@ -485,6 +526,7 @@ def generate_launch_description():
         delayed_get_container_server,  # Starts after gripper_controller is spawned
         delayed_place_container_server,  # Starts after gripper_controller is spawned
         delayed_navigate_to_address_server,  # Starts after manipulator_controller is spawned
+        delayed_extract_box_server,  # Starts after scara_controller is spawned (SCARA only)
         rviz_node
     ])
 

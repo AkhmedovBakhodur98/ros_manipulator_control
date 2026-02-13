@@ -15,12 +15,14 @@ find_package(trajectory_msgs REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 find_package(geometry_msgs REQUIRED)
 
-# Action definition
+# Message and action definitions
 rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/Address.msg"
   "action/MoveJointGroup.action"
   "action/GetContainer.action"
   "action/PlaceContainer.action"
   "action/NavigateToAddress.action"
+  "action/ExtractBox.action"
   DEPENDENCIES
     sensor_msgs
     control_msgs
@@ -37,6 +39,7 @@ install(PROGRAMS
   src/get_container_server.py
   src/place_container_server.py
   src/navigate_to_address_server.py
+  src/extract_box_server.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

@@ -32,10 +32,13 @@ Unified control interface with action servers and services.
 - `src/get_container_server.py` - Container pick orchestration action server
 - `src/place_container_server.py` - Container place orchestration action server
 - `src/navigate_to_address_server.py` - Address-based platform navigation action server
+- `src/extract_box_server.py` - Box extraction orchestration action server
 - `action/MoveJointGroup.action` - Joint movement action definition
 - `action/GetContainer.action` - Container pick action definition
 - `action/PlaceContainer.action` - Container place action definition
 - `action/NavigateToAddress.action` - Address-based navigation action definition
+- `action/ExtractBox.action` - Box extraction action definition
+- `msg/Address.msg` - Cabinet cell address message
 - `config/` - Server configurations
 
 ### scara_description

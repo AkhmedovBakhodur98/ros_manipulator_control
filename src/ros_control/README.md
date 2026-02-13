@@ -132,3 +132,4 @@ To add support for new controllers, add them to the `known_mappings` dictionary 
 
 See `docs/ros_control/move_joint_group_architecture.md` for detailed architecture documentation.
 
+

@@ -24,10 +24,15 @@
   <depend>controller_manager_msgs</depend>
   <depend>builtin_interfaces</depend>
   <depend>geometry_msgs</depend>
+  <depend>action_msgs</depend>
+  <depend>tf2_ros</depend>
 
   <!-- Controller dependencies -->
   <depend>controller_manager</depend>
   <depend>ros2_control</depend>
+
+  <!-- SCARA control library -->
+  <depend>scara_control</depend>
 
   <!-- Python dependencies -->
   <depend>pyyaml</depend>
@@ -39,4 +44,5 @@
     <build_type>ament_cmake</build_type>
   </export>
 </package>
+
 

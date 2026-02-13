@@ -1,0 +1,27 @@
+extract_box_server:
+  ros__parameters:
+    # Hook grasp parameters
+    hook_grasp:
+      wrist_angle_rad: 1.5708       # ±π/2 — hook orientation (sign auto from side)
+      z_offset_m: 0.03              # Raise/lower distance to clear handle plate
+      approach_depth_m: 0.20        # How far arm reaches into cabinet (Y axis)
+      approach_x_offset_m: 0.20     # X offset for approach — keeps arm within shoulder limits
+      y_inside_m: 0.02              # Extra depth inside box edge
+      z_lower_velocity: 0.05        # Z lowering velocity (m/s)
+
+    # Motion parameters
+    motion:
+      approach_velocity: 0.5        # Velocity scaling for approach
+      retract_velocity: 0.05        # Velocity scaling for retraction (with box, slow for visual)
+      linear_step_size: 0.005       # Step size for linear retraction (m)
+      return_home: true             # If true, arm returns to home after retract
+
+    # Timeouts
+    timeouts:
+      navigate_timeout: 60.0        # NavigateToAddress timeout (seconds)
+      extract_timeout: 30.0         # SCARA extraction timeout (seconds)
+
+    # Sensor (mock)
+    sensor:
+      mock: true                    # Use mock sensor (always returns true)
+      # topic: "/box_sensor"        # Real sensor topic (for future)
