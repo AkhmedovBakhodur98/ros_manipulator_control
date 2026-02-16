@@ -1,0 +1,42 @@
+rest_api_bridge:
+  ros__parameters:
+    # Server configuration
+    host: "0.0.0.0"
+    port: 8080
+    api_base_path: "/api/v1"
+
+    # Authentication configuration
+    auth:
+      enabled: true
+
+      # JWT settings
+      jwt:
+        # IMPORTANT: Change this secret in production!
+        # Generate with: python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+        secret_key: "your-256-bit-secret-change-in-production"
+        algorithm: "HS256"
+        access_token_expire_minutes: 60
+
+      # Client credentials (hashed with bcrypt)
+      # Generate hash with: python3 -c "from passlib.context import CryptContext; pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto'); print(pwd_context.hash('your_secret_here'))"
+      clients:
+        # Example client (password: demo_secret_2024)
+        wms_system: "$2b$12$gxgYYP8vblFdkpOwXtLmEuY6AZDzMlC.O..Xnr7y9wN0EK5sBuFZe"
+
+      # List of allowed client IDs
+      allowed_clients:
+        - "wms_system"
+
+    # Operation mode
+    mock_mode: true
+
+    # CORS configuration
+    cors:
+      enabled: true
+      allow_origins:
+        - "*"  # In production, specify exact origins
+      allow_methods:
+        - "GET"
+        - "POST"
+      allow_headers:
+        - "*"

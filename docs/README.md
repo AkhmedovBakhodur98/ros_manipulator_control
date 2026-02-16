@@ -1,6 +1,6 @@
 # Documentation Overview
 
-This directory contains comprehensive documentation for the manipulator ROS2 control system, including the main manipulator, SCARA arm, SCARA control library, unified control interface, and system bringup.
+This directory contains comprehensive documentation for the manipulator ROS2 control system, including the main manipulator, SCARA arm, SCARA control library, unified control interface, REST API bridge, and system bringup.
 
 ---
 
@@ -33,6 +33,13 @@ docs/
 │   ├── get_container_server.md            # GetContainer server documentation
 │   ├── place_container_action.md          # PlaceContainer architectural design
 │   └── place_container_server.md          # PlaceContainer server documentation
+├── rest_api_bridge/                       # REST API bridge documentation
+│   ├── package_structure.md               # Package structure and API reference
+│   ├── API_REFERENCE.md                   # Complete API specification (English)
+│   ├── API_CLIENT_GUIDE_RU.md             # Client API guide (Russian)
+│   ├── ENDPOINT_CHANGES.md                # Endpoint renaming guide (Feb 2026)
+│   ├── TESTING.md                         # Testing guide with examples
+│   └── DEPENDENCIES.md                    # Python dependency installation
 └── manipulator_bringup/                   # System bringup documentation
     ├── package_structure.md               # Package structure and files
     ├── launch_files.md                    # Launch file documentation
@@ -64,6 +71,14 @@ docs/
 - [ros_control/get_container_server.md](ros_control/get_container_server.md) - Container pick operations
 - [ros_control/place_container_server.md](ros_control/place_container_server.md) - Container place operations
 - [scara_description/ros2_control.md](scara_description/ros2_control.md) - SCARA ros2_control integration
+
+**External API:**
+- [rest_api_bridge/package_structure.md](rest_api_bridge/package_structure.md) - REST API for WMS integration
+- [rest_api_bridge/API_REFERENCE.md](rest_api_bridge/API_REFERENCE.md) - Complete API specification (English)
+- [rest_api_bridge/API_CLIENT_GUIDE_RU.md](rest_api_bridge/API_CLIENT_GUIDE_RU.md) - Client API guide (Russian)
+- [rest_api_bridge/ENDPOINT_CHANGES.md](rest_api_bridge/ENDPOINT_CHANGES.md) - Endpoint renaming guide (Feb 2026)
+- [rest_api_bridge/TESTING.md](rest_api_bridge/TESTING.md) - API testing guide
+- [rest_api_bridge/DEPENDENCIES.md](rest_api_bridge/DEPENDENCIES.md) - Python dependencies
 
 **Reference:**
 - [manipulator_description/frames_reference.md](manipulator_description/frames_reference.md) - Frame coordinate systems
@@ -322,6 +337,132 @@ docs/
 
 ---
 
+## REST API Bridge Documentation
+
+### [package_structure.md](rest_api_bridge/package_structure.md)
+**Purpose:** Complete documentation for the REST API Bridge package that provides HTTP/JSON endpoints for external WMS (Warehouse Management Systems) to control the robot.
+
+**Contents:**
+- Package structure and file descriptions
+- FastAPI application architecture
+- JWT authentication and security
+- API endpoint reference (health, auth, container, medicine, task)
+- Pydantic request/response models
+- Mock service implementation
+- Configuration parameters
+- ROS2 integration design
+- HTTP/Python/JavaScript client examples
+- Production deployment guide
+- Security best practices
+- Troubleshooting
+
+**When to read:** When you need to:
+- Integrate external systems with the robot via REST API
+- Understand API authentication and security
+- Test API endpoints
+- Deploy the API in production
+- Add new API endpoints
+- Implement real ROS2 integration (replacing mock mode)
+
+---
+
+### [TESTING.md](rest_api_bridge/TESTING.md)
+**Purpose:** Complete guide for testing REST API endpoints with examples.
+
+**Contents:**
+- Starting the REST API server
+- Health check testing
+- JWT authentication flow
+- Testing all API endpoints with curl
+- Python test script
+- Expected responses
+- Troubleshooting common issues
+
+**When to read:** When you need to:
+- Verify API server is working correctly
+- Test new endpoints after changes
+- Debug API issues
+- Learn how to interact with the API
+
+---
+
+### [API_REFERENCE.md](rest_api_bridge/API_REFERENCE.md)
+**Purpose:** Complete REST API specification with detailed endpoint documentation (English).
+
+**Contents:**
+- All endpoint specifications with request/response examples
+- Authentication flow (JWT tokens)
+- Error response format
+- Complete workflow examples
+- Python and curl client examples
+- Interactive documentation (Swagger UI)
+
+**When to read:** When you need to:
+- Integrate with the REST API
+- Understand endpoint request/response structures
+- Implement API clients
+- Debug API integration issues
+
+---
+
+### [API_CLIENT_GUIDE_RU.md](rest_api_bridge/API_CLIENT_GUIDE_RU.md)
+**Purpose:** Comprehensive client integration guide in Russian (Полное руководство по интеграции на русском языке).
+
+**Contents (на русском языке):**
+- Быстрый старт с примерами
+- Аутентификация JWT
+- Проверка состояния системы
+- Работа с контейнерами (получение, возврат)
+- Работа с медикаментами (извлечение, размещение)
+- Управление задачами (статус, отмена)
+- Типичные сценарии использования
+- Обработка ошибок и коды ответов
+- Примеры интеграции (Python, C#)
+- Рекомендации по интеграции
+- FAQ на русском языке
+
+**When to read (Когда читать):** When you need to:
+- Integrate external WMS systems with the robot API
+- Learn the complete API workflow with real examples
+- Understand error handling and best practices
+- Implement API clients in Python or C#
+- Russian-speaking developers and integrators
+
+---
+
+### [ENDPOINT_CHANGES.md](rest_api_bridge/ENDPOINT_CHANGES.md)
+**Purpose:** Migration guide for endpoint renaming (February 2026).
+
+**Contents:**
+- Summary of renamed endpoints (startloading→is_ready, getmedicine→get_items, putmedicine→put_items)
+- Migration guide with before/after examples
+- Python client update examples
+- Testing commands for new endpoints
+- Code and model changes
+
+**When to read:** When you need to:
+- Migrate existing API clients to new endpoint names
+- Understand what changed in February 2026 update
+- Update integration code
+
+---
+
+### [DEPENDENCIES.md](rest_api_bridge/DEPENDENCIES.md)
+**Purpose:** Python dependency installation guide for REST API Bridge.
+
+**Contents:**
+- Required Python packages (python-jose, passlib, bcrypt)
+- Installation instructions
+- Version compatibility notes
+- Troubleshooting dependency issues
+
+**When to read:** When you need to:
+- Install REST API Bridge dependencies
+- Fix dependency-related errors
+- Understand version compatibility requirements
+
+---
+
 ## Manipulator Bringup Documentation
 
 ### [package_structure.md](manipulator_bringup/package_structure.md)
@@ -393,6 +534,12 @@ docs/
 
 **...see what's new:**
 - Read [scara_description/CHANGELOG.md](scara_description/CHANGELOG.md)
+
+**...integrate external systems via REST API:**
+- Read [rest_api_bridge/API_REFERENCE.md](rest_api_bridge/API_REFERENCE.md) for complete API specification
+- Read [rest_api_bridge/API_CLIENT_GUIDE_RU.md](rest_api_bridge/API_CLIENT_GUIDE_RU.md) for Russian client guide
+- Read [rest_api_bridge/ENDPOINT_CHANGES.md](rest_api_bridge/ENDPOINT_CHANGES.md) for endpoint migration guide
+- Read [rest_api_bridge/TESTING.md](rest_api_bridge/TESTING.md) for testing examples
 
 ---
 
@@ -519,6 +666,30 @@ ros2 service call /gripper/open std_srvs/srv/Trigger
 ros2 service call /gripper/close std_srvs/srv/Trigger
 ```
 
+### REST API Commands
+
+```bash
+# Start REST API server
+ros2 run rest_api_bridge rest_api_server
+
+# Health check
+curl http://localhost:8080/api/v1/health
+
+# Get JWT token
+curl -X POST http://localhost:8080/api/v1/auth/token \
+  -H "Content-Type: application/json" \
+  -d '{"client_id": "wms_system", "client_secret": "demo_secret_2024"}'
+
+# Get medicine (with authentication)
+curl -X POST http://localhost:8080/api/v1/get_items \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"side": "left", "cabinet_num": 2, "row": 1, "column": 0, "item_count": 1}'
+
+# Interactive API docs
+# Open browser: http://localhost:8080/api/v1/docs
+```
+
 ### Configuration Files
 
 - `src/manipulator_description/config/manipulator_params.yaml` - Main manipulator parameters
@@ -529,6 +700,7 @@ ros2 service call /gripper/close std_srvs/srv/Trigger
 - `src/ros_control/config/gripper_config.yaml` - Gripper service config
 - `src/ros_control/config/get_container_config.yaml` - GetContainer server config
 - `src/ros_control/config/place_container_config.yaml` - PlaceContainer server config
+- `src/rest_api_bridge/config/rest_api_config.yaml` - REST API server and authentication config
 
 ### Key Links
 
@@ -559,5 +731,7 @@ If you have questions about:
 - **Integration:** See integration guides
 - **Control:** See ros_control documentation
 - **Frames:** See frames reference
+- **REST API:** See [rest_api_bridge/API_REFERENCE.md](rest_api_bridge/API_REFERENCE.md) or [API_CLIENT_GUIDE_RU.md](rest_api_bridge/API_CLIENT_GUIDE_RU.md) (Russian)
+- **API Testing:** See [rest_api_bridge/TESTING.md](rest_api_bridge/TESTING.md)
 
 For code-related questions, refer to the source code in `src/`.
