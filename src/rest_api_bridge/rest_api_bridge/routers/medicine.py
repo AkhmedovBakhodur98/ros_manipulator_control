@@ -39,6 +39,8 @@ def create_medicine_router(service: MockService, jwt_auth) -> APIRouter:
         """Execute get items operation."""
         try:
             return service.get_items(request)
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(
                 status_code=500,
@@ -64,6 +66,8 @@ def create_medicine_router(service: MockService, jwt_auth) -> APIRouter:
         """Execute put items operation."""
         try:
             return service.put_items(request)
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(
                 status_code=500,

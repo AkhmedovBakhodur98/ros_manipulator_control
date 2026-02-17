@@ -14,18 +14,27 @@ source install/setup.bash
 ros2 run rest_api_bridge rest_api_server
 ```
 
-**Expected output:**
+**Expected output (real mode, default):**
+```
+[INFO] [rest_api_bridge]: Configuration loaded
+[INFO] [rest_api_bridge]: Mock mode: False
+[INFO] [rest_api_bridge]: Auth enabled: True
+[INFO] [rest_api_bridge]: RosService initialized with action clients
+[INFO] [rest_api_bridge]: Using real ROS2 service
+[INFO] [rest_api_bridge]: CORS enabled
+[INFO] [rest_api_bridge]: FastAPI application configured
+[INFO] [rest_api_bridge]: Starting REST API server on 0.0.0.0:8080
+[INFO] [rest_api_bridge]: REST API server started successfully
+[INFO] [rest_api_bridge]: ROS2 node spinning...
+```
+
+**Expected output (mock mode, `mock_mode: true` in config):**
 ```
 [INFO] [rest_api_bridge]: Configuration loaded
 [INFO] [rest_api_bridge]: Mock mode: True
 [INFO] [rest_api_bridge]: Auth enabled: True
 [INFO] [rest_api_bridge]: Using mock service implementation
-[INFO] [rest_api_bridge]: CORS enabled
-[INFO] [rest_api_bridge]: FastAPI application configured
-[INFO] [rest_api_bridge]: Starting REST API server on 0.0.0.0:8080
-[INFO] [rest_api_bridge]: API docs available at: http://0.0.0.0:8080/api/v1/docs
-[INFO] [rest_api_bridge]: REST API server started successfully
-[INFO] [rest_api_bridge]: ROS2 node spinning...
+...
 ```
 
 ---
@@ -527,11 +536,128 @@ pip3 install python-jose[cryptography] passlib 'bcrypt<4.0.0' --break-system-pac
 
 ---
 
+## Real Mode Testing (with robot)
+
+When `mock_mode: false` (default), the REST API connects to real ROS2 action servers.
+
+### Prerequisites
+
+Start the bringup first:
+```bash
+ros2 launch manipulator_bringup manipulator_bringup.launch.py rviz:=true
+```
+
+Then start the REST API server:
+```bash
+ros2 run rest_api_bridge rest_api_server
+```
+
+### Test readiness
+
+```bash
+curl http://localhost:8080/api/v1/is_ready -H "Authorization: Bearer $TOKEN"
+```
+
+**Expected (all servers running):**
+```json
+{"status": "ok"}
+```
+
+**Expected (servers not running):**
+```json
+{"status": "not ready"}
+```
+
+### Test getcontainer (real ROS2 call)
+
+```bash
+curl -X POST http://localhost:8080/api/v1/getcontainer \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"unload": false}'
+```
+
+**Response:** `202 Accepted`
+
+**Poll task/status — real-time progress from action feedback:**
+```
+progress=0%   message="Task accepted, sending goal to /get_container"
+progress=25%  message="Moving to container"
+progress=50%  message="Closing gripper"
+progress=75%  message="Lifting container"
+progress=100% message="Container picked successfully"  finished_at=set, error_code=null
+```
+
+### Test retcontainer (real ROS2 call)
+
+```bash
+curl "http://localhost:8080/api/v1/retcontainer?unload=false" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+**Poll task/status:**
+```
+progress=0%   message="Task accepted, sending goal to /place_container"
+progress=33%  message="Opening gripper"
+progress=66%  message="Retracting"
+progress=100% message="Container placed successfully"  finished_at=set, error_code=null
+```
+
+### Test 409 Conflict
+
+Start a task, then immediately try another:
+```bash
+# Start getcontainer
+curl -X POST http://localhost:8080/api/v1/getcontainer \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"unload": false}'
+
+# Immediately try retcontainer — should get 409
+curl "http://localhost:8080/api/v1/retcontainer?unload=false" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+**Expected (409):**
+```json
+{"detail": {"status": "error", "error_code": "task_in_progress", "message": "Another task is currently running"}}
+```
+
+### Test get_items (stub — action not available)
+
+```bash
+curl -X POST http://localhost:8080/api/v1/get_items \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"medicine_list": [{"image_id": "test", "raw_id": 0}], "box_id": "box_l_0_0_0", "task_id": "test-1"}'
+```
+
+**Response:** `202 Accepted`
+
+**task/status immediately after:**
+```json
+{
+  "status": "ok",
+  "task": {
+    "task_id": "test-1",
+    "progress": 0,
+    "current_operation": "get_items",
+    "error_code": "action_not_available",
+    "message": "get_items action is not available (ROS2 action type not implemented)"
+  }
+}
+```
+
+---
+
 ## Notes
 
 - All async operations return HTTP 202 (Accepted)
-- Task status contains `medicine_qr` array after get_items
-- Task status contains `container_id` after getcontainer
+- In **real mode**: task status shows real-time progress from ROS2 action feedback
+- In **mock mode**: tasks complete instantly with 100% progress
+- Task status contains `medicine_qr` array after get_items (mock mode only for now)
+- Task status contains `container_id` after getcontainer (mock mode only for now)
 - `/retcontainer` is GET with query parameter, not POST!
 - All timestamps are in ISO 8601 format
 - JWT tokens expire after 60 minutes by default
+- 409 Conflict returned when trying to start a task while another is running (real mode)

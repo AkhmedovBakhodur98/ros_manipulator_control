@@ -40,7 +40,8 @@ src/rest_api_bridge/
 │   │   └── jwt_auth.py                # JWT validation middleware
 │   ├── services/
 │   │   ├── __init__.py
-│   │   └── mock_service.py            # Mock implementation
+│   │   ├── mock_service.py            # Mock implementation (mock_mode: true)
+│   │   └── ros_service.py             # Real ROS2 service (mock_mode: false)
 │   └── utils/
 │       ├── __init__.py
 │       └── config.py                  # Configuration loader
@@ -276,7 +277,7 @@ rest_api_bridge:
     host: "0.0.0.0"
     port: 8080
     api_base_path: "/api/v1"
-    mock_mode: true  # Set to false for real robot
+    mock_mode: false  # Set to true for testing without robot
 ```
 
 ### CORS Settings
@@ -342,23 +343,44 @@ Pydantic models for response validation:
 ### services/mock_service.py
 
 Mock implementation that simulates robot operations without actual robot interaction.
+Used when `mock_mode: true` in config.
 
 **Class:** `MockService`
 
 **Methods:**
 - `get_container(request)` - Returns immediate success, generates container_id
 - `return_container(request)` - Returns immediate success
-- `get_medicine(request)` - Returns immediate success, generates medicine_qr array
-- `put_medicine(request)` - Returns immediate success
+- `get_items(request)` - Returns immediate success, generates medicine_qr array
+- `put_items(request)` - Returns immediate success
 - `get_task_status()` - Returns current/last task information
 - `cancel_task()` - Cancels current task
-- `start_loading()` - Returns system ready status
+- `is_ready()` - Returns system ready status
+
+### services/ros_service.py
+
+Real ROS2 service that connects to action servers. Used when `mock_mode: false` in config.
+
+**Class:** `RosService`
+
+**Action clients:**
+- `/get_container` (`GetContainer`) — working
+- `/place_container` (`PlaceContainer`) — working
+
+**Methods (same interface as MockService):**
+- `get_container(request)` - Sends goal to `/get_container`, returns 202, runs in worker thread
+- `return_container(request)` - Sends goal to `/place_container`, returns 202, runs in worker thread
+- `get_items(request)` - Accepts task, stub returns `error_code: action_not_available`
+- `put_items(request)` - Accepts task, stub returns `error_code: action_not_available`
+- `get_task_status()` - Returns task with real-time progress from action feedback
+- `cancel_task()` - Sets cancel flag + calls `cancel_goal_async()` on active goal
+- `is_ready()` - Checks `/get_container` and `/place_container` reachability via `wait_for_server(2s)`
 
 **Features:**
-- Generates UUIDs for task_id and container_id
-- Generates mock DataMatrix codes for medicine_qr
-- Maintains current task state
-- Logs all operations via ROS2 logger
+- Thread-safe task state with `threading.Lock`
+- Worker threads per operation (daemon=True)
+- Action server feedback streamed to task progress
+- 409 Conflict when another task is in progress
+- Cancellation support via `cancel_goal_async()`
 
 ### middleware/jwt_auth.py
 
@@ -416,14 +438,14 @@ WMS Client
 │   REST API Bridge   │
 │   (FastAPI + ROS2)  │
 └──────────┬──────────┘
-           │ (Future: mock_mode=false)
+           │ (mock_mode=false → RosService)
            │
            ▼
 ┌─────────────────────┐
 │  ROS2 Action Clients│
-│  - /get_container   │
-│  - /navigate_to_... │
-│  - /extract_box     │
+│  - /get_container   │  ✅ Working
+│  - /place_container │  ✅ Working
+│  - /PickItems       │  ❌ Not yet (stub returns error)
 └─────────────────────┘
 ```
 
@@ -558,35 +580,21 @@ pip3 install 'bcrypt<4.0.0' --break-system-packages --force-reinstall
 
 ## Future Development
 
-### Adding Real ROS2 Integration
+### Remaining: `get_items` / `put_items` integration
 
-1. Create `services/ros_service.py`:
-```python
-from rclpy.action import ActionClient
-from ros_control.action import GetContainer
+`RosService` is implemented and working for container operations. The remaining work is:
 
-class RosService:
-    def __init__(self, node):
-        self.node = node
-        self.get_container_client = ActionClient(
-            node, GetContainer, '/get_container'
-        )
-    
-    def get_container(self, request):
-        # Send ROS2 action goal
-        # Wait for result
-        # Return AcceptedResponse
+1. Create `msg/Medicament.msg` and `action/PickItemsFromWarehouse.action` in `ros_control`
+2. Implement `/PickItems` action server (in `ya_robot_manipulator` repo)
+3. Replace stubs in `RosService._run_stub_worker()` with real action clients
+
+### Switching between mock and real mode
+
+```yaml
+# config/rest_api_config.yaml
+mock_mode: false   # RosService — real ROS2 calls (default)
+mock_mode: true    # MockService — instant fake responses for testing
 ```
-
-2. Update `api_server.py`:
-```python
-if self.config.get('mock_mode', True):
-    self.service = MockService(self)
-else:
-    self.service = RosService(self)
-```
-
-3. Set `mock_mode: false` in config
 
 ---
 

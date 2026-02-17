@@ -28,7 +28,7 @@ rest_api_bridge:
         - "wms_system"
 
     # Operation mode
-    mock_mode: true
+    mock_mode: false
 
     # CORS configuration
     cors:

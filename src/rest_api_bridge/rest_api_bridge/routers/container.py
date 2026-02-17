@@ -38,6 +38,8 @@ def create_container_router(service: MockService, jwt_auth) -> APIRouter:
         """Execute get container operation."""
         try:
             return service.get_container(request)
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(
                 status_code=500,
@@ -63,6 +65,8 @@ def create_container_router(service: MockService, jwt_auth) -> APIRouter:
         try:
             request = ReturnContainerRequest(unload=unload)
             return service.return_container(request)
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(
                 status_code=500,

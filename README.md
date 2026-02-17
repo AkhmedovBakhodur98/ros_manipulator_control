@@ -9,6 +9,7 @@ ROS2 control system for an industrial manipulator with optional SCARA arm. Provi
 | `manipulator_description` | Robot model (URDF/xacro), meshes, controllers config |
 | `scara_description` | Optional SCARA arm module (3-DOF, attaches to picker_frame) |
 | `ros_control` | Unified control interface: joint movement, gripper, container operations |
+| `rest_api_bridge` | REST API layer for external WMS integration (FastAPI + JWT auth) |
 | `manipulator_bringup` | Launch files for full system startup |
 
 ## Quick Start
@@ -56,6 +57,45 @@ ros2 service call /gripper/open std_srvs/srv/Trigger
 ros2 service call /gripper/close std_srvs/srv/Trigger
 ```
 
+### REST API Integration
+
+External systems can control the robot via HTTP/JSON REST API:
+
+```bash
+# Start REST API server
+ros2 launch rest_api_bridge rest_api_server.launch.py
+
+# API available at: http://localhost:8080/api/v1
+# Interactive docs: http://localhost:8080/api/v1/docs
+
+# Get authentication token
+curl -X POST http://localhost:8080/api/v1/auth/token \
+  -H "Content-Type: application/json" \
+  -d '{"client_id": "wms_system", "client_secret": "demo_secret_2024"}'
+
+# Get container
+curl -X POST http://localhost:8080/api/v1/getcontainer \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"unload": false}'
+
+# Extract medicines
+curl -X POST http://localhost:8080/api/v1/get_items \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "medicine_list": [{"image_id": "med-001", "raw_id": 0}],
+    "box_id": "BOX-12345",
+    "task_id": "task-001"
+  }'
+
+# Check task status
+curl http://localhost:8080/api/v1/task/status \
+  -H "Authorization: Bearer <token>"
+```
+
+See [docs/rest_api_bridge/](docs/rest_api_bridge/) for complete API documentation.
+
 ## Project Structure
 
 ```
@@ -82,6 +122,16 @@ src/
 │       ├── place_container_server.py
 │       └── navigate_to_address_server.py
 │
+├── rest_api_bridge/               # REST API for external WMS
+│   ├── rest_api_bridge/           # Python package
+│   │   ├── api_server.py          # FastAPI + ROS2 node
+│   │   ├── routers/               # API endpoints (auth, container, medicine, task)
+│   │   ├── models/                # Pydantic request/response models
+│   │   ├── middleware/            # JWT authentication
+│   │   └── services/              # Mock/ROS service implementations
+│   ├── config/                    # rest_api_config.yaml (JWT, server settings)
+│   └── launch/                    # rest_api_server.launch.py
+│
 └── manipulator_bringup/           # System startup
     └── launch/
         └── manipulator_bringup.launch.py
@@ -105,6 +155,22 @@ src/
 | `/gripper/open` | `std_srvs/srv/Trigger` | Open gripper |
 | `/gripper/close` | `std_srvs/srv/Trigger` | Close gripper |
 
+### REST API Endpoints
+
+External systems can access robot functionality via REST API:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/auth/token` | POST | Get JWT authentication token |
+| `/api/v1/health` | GET | Check service health |
+| `/api/v1/is_ready` | GET | Check system readiness |
+| `/api/v1/getcontainer` | POST | Retrieve container from storage |
+| `/api/v1/retcontainer` | GET | Return container to storage |
+| `/api/v1/get_items` | POST | Extract medicines from box |
+| `/api/v1/put_items` | POST | Place medicines into box |
+| `/api/v1/task/status` | GET | Get current task status |
+| `/api/v1/task/cancel` | GET | Cancel running task |
+
 ## Documentation
 
 Full documentation is in the [docs/](docs/) directory:
@@ -114,5 +180,7 @@ Full documentation is in the [docs/](docs/) directory:
 - [docs/ros_control/get_container_server.md](docs/ros_control/get_container_server.md) - Container pick operations
 - [docs/ros_control/place_container_server.md](docs/ros_control/place_container_server.md) - Container place operations
 - [docs/ros_control/navigate_to_address_server.md](docs/ros_control/navigate_to_address_server.md) - Address-based platform navigation
+- [docs/rest_api_bridge/package_structure.md](docs/rest_api_bridge/package_structure.md) - REST API complete reference
+- [docs/rest_api_bridge/API_CLIENT_GUIDE_RU.md](docs/rest_api_bridge/API_CLIENT_GUIDE_RU.md) - API client integration guide (Russian)
 - [docs/manipulator_bringup/launch_files.md](docs/manipulator_bringup/launch_files.md) - Launch file reference
 - [docs/manipulator_description/package_structure.md](docs/manipulator_description/package_structure.md) - Robot model details

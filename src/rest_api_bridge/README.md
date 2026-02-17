@@ -35,17 +35,17 @@ REST API layer that provides HTTP/JSON endpoints for external systems (WMS) to c
 │             │               │
 │  ┌──────────v───────────┐  │
 │  │  Service Layer       │  │
-│  │  (Mock / ROS2)       │  │
+│  │  MockService (test)  │  │
+│  │  RosService (real)   │  │
 │  └──────────┬───────────┘  │
 └─────────────┼───────────────┘
               │ ROS2 Actions
               v
 ┌─────────────────────────────┐
 │   ROS2 Action Servers       │
-│  - get_container            │
-│  - navigate_to_address      │
-│  - extract_box              │
-│  - move_joint_group         │
+│  - /get_container      ✅  │
+│  - /place_container    ✅  │
+│  - /PickItems          ❌  │
 └─────────────────────────────┘
 ```
 
@@ -116,11 +116,11 @@ auth:
 ### Operation Mode
 
 ```yaml
+# Default: real ROS2 connections
+mock_mode: false
+
 # Use mock mode for testing without ROS2 robot
 mock_mode: true
-
-# Set to false for real robot operations
-mock_mode: false
 ```
 
 ## Usage
@@ -149,298 +149,64 @@ http://localhost:8080/api/v1/docs
 
 ## API Endpoints
 
-### Authentication
+Base URL: `http://localhost:8080/api/v1`
 
-#### POST /api/v1/auth/token
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/auth/token` | POST | No | Get JWT authentication token |
+| `/health` | GET | No | Service health check |
+| `/is_ready` | GET | Yes | System readiness (checks action servers) |
+| `/getcontainer` | POST | Yes | Pick container (real ROS2 call) |
+| `/retcontainer` | GET | Yes | Place container back (real ROS2 call) |
+| `/get_items` | POST | Yes | Extract items (stub — `action_not_available`) |
+| `/put_items` | POST | Yes | Place items (stub — `action_not_available`) |
+| `/task/status` | GET | Yes | Current task status with progress |
+| `/task/cancel` | GET | Yes | Cancel running task |
 
-Generate JWT access token.
+See [docs/rest_api_bridge/package_structure.md](../../docs/rest_api_bridge/package_structure.md) for full endpoint documentation.
 
-**Request:**
-```json
-{
-  "client_id": "wms_system",
-  "client_secret": "your_secret"
-}
-```
-
-**Response:**
-```json
-{
-  "access_token": "eyJhbGciOiJIUzI1NiIs...",
-  "token_type": "bearer",
-  "expires_in": 3600
-}
-```
-
-### Health Check
-
-#### GET /api/v1/health
-
-Check service health (no auth required).
-
-**Response:**
-```json
-{
-  "status": "healthy",
-  "mock_mode": true,
-  "timestamp": "2024-01-15T10:30:00.000Z"
-}
-```
-
-#### GET /api/v1/startloading
-
-Verify system readiness (requires auth).
-
-**Response:**
-```json
-{
-  "ready": true,
-  "nodes_status": {
-    "manipulator_controller": "active",
-    "picker_z_controller": "active",
-    "gripper_controller": "active",
-    "navigation": "active"
-  },
-  "message": "All systems operational"
-}
-```
-
-### Container Operations
-
-#### POST /api/v1/container/get
-
-Retrieve container from storage.
-
-**Headers:**
-```
-Authorization: Bearer <jwt_token>
-```
-
-**Request:**
-```json
-{
-  "container_id": "CNT-12345"
-}
-```
-
-**Response:**
-```json
-{
-  "task_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "completed",
-  "message": "Container CNT-12345 retrieved successfully",
-  "progress": 1.0
-}
-```
-
-#### POST /api/v1/container/return
-
-Return container to storage.
-
-**Request:**
-```json
-{
-  "container_id": "CNT-12345"
-}
-```
-
-### Medicine Operations
-
-#### POST /api/v1/medicine/get
-
-Extract medicine from cabinet.
-
-**Request:**
-```json
-{
-  "side": "left",
-  "cabinet_num": 2,
-  "row": 1,
-  "column": 0,
-  "item_count": 1
-}
-```
-
-**Response:**
-```json
-{
-  "task_id": "550e8400-e29b-41d4-a716-446655440001",
-  "status": "completed",
-  "message": "Retrieved 1 item(s) from left-2-1-0",
-  "progress": 1.0
-}
-```
-
-#### POST /api/v1/medicine/put
-
-Place medicine into cabinet.
-
-**Request:**
-```json
-{
-  "side": "right",
-  "cabinet_num": 3,
-  "row": 2,
-  "column": 1,
-  "item_count": 2
-}
-```
-
-### Task Management
-
-#### GET /api/v1/task/status?task_id={task_id}
-
-Query task status.
-
-**Response:**
-```json
-{
-  "task_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "completed",
-  "operation": "get_medicine",
-  "progress": 1.0,
-  "message": "Task completed successfully",
-  "started_at": "2024-01-15T10:30:00.000Z",
-  "completed_at": "2024-01-15T10:30:15.000Z"
-}
-```
-
-#### POST /api/v1/task/cancel?task_id={task_id}
-
-Cancel a running task.
-
-**Response:**
-```json
-{
-  "task_id": "550e8400-e29b-41d4-a716-446655440000",
-  "success": true,
-  "message": "Task cancelled successfully"
-}
-```
-
-## Testing with curl
-
-### 1. Get Authentication Token
+## Quick Test
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/auth/token \
+# Get token
+TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/token \
   -H "Content-Type: application/json" \
-  -d '{"client_id": "wms_system", "client_secret": "demo_secret_2024"}'
-```
+  -d '{"client_id":"wms_system","client_secret":"demo_secret_2024"}' \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 
-Save the returned `access_token`.
+# Check readiness
+curl -s http://localhost:8080/api/v1/is_ready -H "Authorization: Bearer $TOKEN"
 
-### 2. Call API Endpoints
-
-```bash
-# Health check (no auth)
-curl http://localhost:8080/api/v1/health
-
-# Start loading (with auth)
-curl http://localhost:8080/api/v1/startloading \
-  -H "Authorization: Bearer YOUR_TOKEN_HERE"
-
-# Get medicine
-curl -X POST http://localhost:8080/api/v1/medicine/get \
-  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+# Pick container (real ROS2 call)
+curl -s -X POST http://localhost:8080/api/v1/getcontainer \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{
-    "side": "left",
-    "cabinet_num": 2,
-    "row": 1,
-    "column": 0,
-    "item_count": 1
-  }'
+  -d '{"unload": false}'
 
-# Check task status
-curl "http://localhost:8080/api/v1/task/status?task_id=YOUR_TASK_ID" \
-  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+# Poll task status
+curl -s http://localhost:8080/api/v1/task/status -H "Authorization: Bearer $TOKEN"
+
+# Place container back
+curl -s "http://localhost:8080/api/v1/retcontainer?unload=false" \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
-## Testing with Python
-
-```python
-import requests
-
-# Base URL
-base_url = "http://localhost:8080/api/v1"
-
-# 1. Authenticate
-auth_response = requests.post(
-    f"{base_url}/auth/token",
-    json={
-        "client_id": "wms_system",
-        "client_secret": "demo_secret_2024"
-    }
-)
-token = auth_response.json()["access_token"]
-headers = {"Authorization": f"Bearer {token}"}
-
-# 2. Get medicine
-response = requests.post(
-    f"{base_url}/medicine/get",
-    headers=headers,
-    json={
-        "side": "left",
-        "cabinet_num": 2,
-        "row": 1,
-        "column": 0,
-        "item_count": 1
-    }
-)
-task_id = response.json()["task_id"]
-print(f"Task created: {task_id}")
-
-# 3. Check status
-status_response = requests.get(
-    f"{base_url}/task/status",
-    headers=headers,
-    params={"task_id": task_id}
-)
-print(f"Status: {status_response.json()}")
-```
+See [docs/rest_api_bridge/TESTING.md](../../docs/rest_api_bridge/TESTING.md) for full testing guide.
 
 ## Development
 
-### Mock Mode
+### Service Modes
 
-Mock mode allows testing without ROS2 robot:
+**Real mode** (`mock_mode: false`, default):
+- Connects to `/get_container` and `/place_container` ROS2 action servers
+- Real-time progress feedback from action servers
+- `get_items`/`put_items` return `action_not_available` (action type not yet implemented)
+- 409 Conflict when another task is in progress
 
+**Mock mode** (`mock_mode: true`):
 - Returns immediate successful responses
 - No actual robot movement
 - Useful for frontend development and API testing
-
-Set `mock_mode: true` in config.
-
-### Adding Real ROS2 Integration
-
-To add real ROS2 action calls:
-
-1. Create `services/ros_service.py` with same interface as `MockService`
-2. Add `ActionClient` for ROS2 actions
-3. Implement async action goal sending with feedback
-4. Switch service based on `mock_mode` in `api_server.py`
-
-Example:
-
-```python
-from rclpy.action import ActionClient
-from ros_control.action import GetContainer
-
-class RosService:
-    def __init__(self, node):
-        self.node = node
-        self.get_container_client = ActionClient(
-            node, GetContainer, 'get_container'
-        )
-
-    async def get_container(self, request):
-        goal = GetContainer.Goal()
-        goal.container_id = request.container_id
-
-        future = self.get_container_client.send_goal_async(goal)
-        # Handle feedback and result...
-```
 
 ## Security Notes
 

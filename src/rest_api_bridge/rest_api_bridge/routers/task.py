@@ -55,6 +55,8 @@ def create_task_router(service: MockService, jwt_auth) -> APIRouter:
         """Cancel current task."""
         try:
             return service.cancel_task()
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(
                 status_code=500,

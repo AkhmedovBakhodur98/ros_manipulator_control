@@ -1,8 +1,8 @@
 """Health check router."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
-from rest_api_bridge.models.responses import HealthResponse, IsReadyResponse
+from rest_api_bridge.models.responses import HealthResponse, IsReadyResponse, ErrorResponse
 from rest_api_bridge.services.mock_service import MockService
 
 
@@ -39,6 +39,14 @@ def create_health_router(service: MockService, config: dict, jwt_auth) -> APIRou
     )
     async def is_ready():
         """Check if system is ready for operations."""
-        return service.is_ready()
+        try:
+            return service.is_ready()
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail={"status": "error", "error_code": "internal_error", "message": str(e)}
+            )
 
     return router

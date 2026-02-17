@@ -37,9 +37,9 @@ class RestApiNode(Node):
             self.service = MockService(self)
             self.get_logger().info('Using mock service implementation')
         else:
-            # TODO: Initialize real ROS2 service when implemented
-            self.get_logger().warn('Real ROS2 service not yet implemented, using mock')
-            self.service = MockService(self)
+            from rest_api_bridge.services.ros_service import RosService
+            self.service = RosService(self)
+            self.get_logger().info('Using real ROS2 service')
 
         # Create FastAPI application
         self.app = self._create_app()
