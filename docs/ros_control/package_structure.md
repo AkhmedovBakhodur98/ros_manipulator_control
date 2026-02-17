@@ -387,6 +387,7 @@ Configuration file for the ExtractBox action server.
 | `hook_grasp.approach_depth_m` | float | 0.20 | How far arm reaches into cabinet (Y axis) |
 | `hook_grasp.approach_x_offset_m` | float | 0.20 | X offset — keeps approach within shoulder limits |
 | `hook_grasp.y_inside_m` | float | 0.02 | Extra depth inside box edge |
+| `hook_grasp.retract_overshoot_m` | float | 0.38 | How far past Y=0 to retract for full box extraction |
 | `hook_grasp.z_lower_velocity` | float | 0.05 | Z lowering velocity (m/s) |
 | `motion.approach_velocity` | float | 0.5 | Velocity scaling for approach |
 | `motion.retract_velocity` | float | 0.05 | Velocity for linear retraction (m/s) |

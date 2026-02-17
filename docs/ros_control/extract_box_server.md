@@ -66,7 +66,7 @@ SCARA EXTRACTION SEQUENCE (side view)
 | 2b. Raise Z | 48% | `move_z(current_z + z_offset)` | Raise picker above handle plate |
 | 2c. Approach | 55% | `move_to_point(x, y)` | Extend arm into cabinet (joint-space motion) |
 | 2d. Lower Z | 65% | `move_z(current_z - z_offset)` | Hook drops into gap under handle plate |
-| 2e. Retract | 75% | `move_linear(x, y)` | Pull box out — pure Y linear motion at constant X |
+| 2e. Retract | 75% | `move_linear(x, y, allow_elbow_flip=True)` | Pull box fully out — Y linear motion with elbow flip |
 | 2f. Home | 85% | `move_home()` | Return arm to home position (if `return_home: true`) |
 
 **Approach target computation:**
@@ -79,24 +79,30 @@ approach_y = ±(approach_depth_m + y_inside_m)             # + for left, - for r
 
 The `approach_x_offset_m` (default 0.20m) keeps the approach angle within the shoulder joint limits (±57°) and enables a pure-Y linear retract at constant X.
 
-**Retract (pure Y-axis linear motion):**
-The retract keeps TCP X coordinate constant and only changes Y:
+**Retract (Y-axis linear motion with overshoot and elbow flip):**
+The retract keeps TCP X coordinate constant and pulls past Y=0 by `retract_overshoot_m` to fully extract the box:
 
 ```
-retract: (approach_x, approach_y) → (approach_x, 0.0)
+retract: (approach_x, approach_y) → (approach_x, ∓retract_overshoot_m)
+         left side: Y goes from +depth to -overshoot
+         right side: Y goes from -depth to +overshoot
 ```
 
-This produces a straight-line motion perpendicular to the cabinet face. The `move_linear` method interpolates Cartesian waypoints (every `linear_step_size` meters) and computes IK for each, then sends a multi-point trajectory to the controller.
+Total retract distance = `approach_depth_m + y_inside_m + retract_overshoot_m` (default: 0.22 + 0.38 = 0.60m, matching standard box length).
+
+The retract uses `move_linear(allow_elbow_flip=True)` because the long retract path crosses the shoulder joint limit (±57°). At the limit boundary, the arm automatically flips elbow configuration (elbow_up → elbow_down) and continues. The TCP stays approximately in place during the flip, maintaining hook contact with the box.
+
+The `move_linear` method interpolates Cartesian waypoints (every `linear_step_size` meters) and computes IK for each, then sends a multi-point trajectory to the controller.
 
 **Side-dependent behavior:**
-- **Left cabinet**: wrist = +π/2, approach_y = +depth
-- **Right cabinet**: wrist = -π/2, approach_y = -depth
+- **Left cabinet**: wrist = +π/2, approach_y = +depth, retract_y = -overshoot
+- **Right cabinet**: wrist = -π/2, approach_y = -depth, retract_y = +overshoot
 
 **Design decisions:**
 - `move_to_point` for approach (joint-space, safer for entry into cabinet)
-- `move_linear` for retraction (straight-line ensures box clears cabinet walls)
+- `move_linear` with `allow_elbow_flip=True` for retraction (straight-line ensures box clears cabinet walls; elbow flip handles shoulder limit crossing)
 - Rotate wrist before raise Z — hook oriented first while arm is at home (safe)
-- X offset on approach — ensures the entire retract path stays within shoulder joint limits
+- X offset on approach — keeps approach angle within shoulder joint limits
 
 **Step 3 — Verify & Complete (90-100%)**
 - Read box extraction sensor → `box_extracted` (mock: always `True` for now)
@@ -216,6 +222,7 @@ extract_box_server:
       approach_depth_m: 0.20        # How far arm reaches into cabinet (Y axis)
       approach_x_offset_m: 0.20     # X offset for approach — keeps arm within shoulder limits
       y_inside_m: 0.02              # Extra depth inside box edge
+      retract_overshoot_m: 0.38    # How far past Y=0 to retract (full box extraction)
       z_lower_velocity: 0.05        # Z lowering velocity (m/s)
 
     motion:
@@ -242,6 +249,7 @@ extract_box_server:
 | `hook_grasp.approach_depth_m` | float | `0.20` | How far arm reaches into cabinet [m] |
 | `hook_grasp.approach_x_offset_m` | float | `0.20` | X offset to keep approach within shoulder limits [m] |
 | `hook_grasp.y_inside_m` | float | `0.02` | Extra depth inside box edge [m] |
+| `hook_grasp.retract_overshoot_m` | float | `0.38` | How far past Y=0 to retract for full extraction [m] |
 | `hook_grasp.z_lower_velocity` | float | `0.05` | Z axis velocity [m/s] |
 | `motion.approach_velocity` | float | `0.5` | Velocity scaling for approach |
 | `motion.retract_velocity` | float | `0.05` | Velocity for linear retraction [m/s] |
@@ -253,12 +261,15 @@ extract_box_server:
 
 ### SCARA Workspace Constraints
 
-The approach X offset exists because the SCARA arm has narrow shoulder joint limits (±57° / ±0.995 rad). Without the offset, the approach at pure Y direction (90° from +X) sits at the shoulder limit and a pure-Y retract becomes impossible.
+The approach X offset exists because the SCARA arm has narrow shoulder joint limits (±57° / ±0.995 rad). Without the offset, the approach at pure Y direction (90° from +X) sits at the shoulder limit and retraction becomes impossible.
 
-With `approach_x_offset_m = 0.20`:
-- Approach point `(0.20, 0.22)`: angle 47.7° — comfortably within limits
-- Retract endpoint `(0.20, 0.00)`: angle 0° — well within limits
-- All intermediate retract waypoints stay within joint limits
+With `approach_x_offset_m = 0.20` and `retract_overshoot_m = 0.38`:
+- Approach point `(0.20, 0.22)`: shoulder angle 47.7° — comfortably within limits
+- Retract path crosses shoulder limit at `Y ≈ -0.10` (shoulder = -57°)
+- Elbow flip at the limit boundary switches from elbow_up to elbow_down
+- After flip: shoulder angle becomes ~+22° — well within limits
+- Retract endpoint `(0.20, -0.38)`: reachable in elbow_down configuration
+- Total retract travel: 0.22 + 0.38 = **0.60m** (matches standard box length)
 
 ---
 

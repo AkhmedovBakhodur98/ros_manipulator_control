@@ -137,6 +137,7 @@ class ExtractBoxServer(Node):
                 'approach_depth_m': 0.20,
                 'approach_x_offset_m': 0.20,
                 'y_inside_m': 0.02,
+                'retract_overshoot_m': 0.38,
                 'z_lower_velocity': 0.05,
             },
             'motion': {
@@ -447,9 +448,10 @@ class ExtractBoxServer(Node):
 
         # --- 2e. Retract (pull box out linearly) ---
         # Pure Y-axis linear retract: X stays constant, only Y changes.
-        # This pulls the TCP straight out of the cabinet.
+        # Retract past Y=0 by overshoot distance to fully extract the box.
+        overshoot = cfg_grasp.get('retract_overshoot_m', 0.0)
         retract_x = approach_x
-        retract_y = 0.0
+        retract_y = -overshoot if box.side == 'left' else overshoot
 
         self.get_logger().info(
             f'Step 2e: Retracting linearly from ({approach_x:.4f}, {approach_y:.4f}) '
@@ -461,7 +463,8 @@ class ExtractBoxServer(Node):
         result = await self.scara.move_linear(
             x=retract_x, y=retract_y,
             velocity=cfg_motion['retract_velocity'],
-            step_size=cfg_motion['linear_step_size']
+            step_size=cfg_motion['linear_step_size'],
+            allow_elbow_flip=True,
         )
         if not result.success:
             return False, f'Retract failed: {result.message}'
