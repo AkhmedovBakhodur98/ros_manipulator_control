@@ -16,16 +16,19 @@ src/ros_control/
 │   ├── GetContainer.action           # Container pick action definition
 │   ├── PlaceContainer.action         # Container place action definition
 │   ├── NavigateToAddress.action      # Address-based navigation action definition
-│   └── ExtractBox.action             # Box extraction action definition
+│   ├── ExtractBox.action             # Box extraction action definition
+│   └── PickItemsFromWarehouse.action # Medicine picking orchestrator action definition
 ├── msg/
-│   └── Address.msg                   # Cabinet cell address message
+│   ├── Address.msg                   # Cabinet cell address message
+│   └── Medicament.msg               # Medicine metadata message
 ├── config/
 │   ├── move_joint_group_config.yaml  # MoveJointGroup server configuration
 │   ├── gripper_config.yaml           # Gripper service configuration
 │   ├── get_container_config.yaml     # GetContainer server configuration
 │   ├── place_container_config.yaml   # PlaceContainer server configuration
 │   ├── navigate_to_address_config.yaml  # NavigateToAddress server configuration
-│   └── extract_box_config.yaml       # ExtractBox server configuration
+│   ├── extract_box_config.yaml       # ExtractBox server configuration
+│   └── pick_items_from_warehouse_config.yaml # PickItemsFromWarehouse server configuration
 ├── launch/
 │   ├── move_joint_group_server.launch.py  # Launch file for MoveJointGroup action server
 │   └── extract_box_server.launch.py       # Launch file for ExtractBox action server
@@ -35,7 +38,8 @@ src/ros_control/
     ├── get_container_server.py       # Container pick orchestration server
     ├── place_container_server.py     # Container place orchestration server
     ├── navigate_to_address_server.py # Address-based platform navigation server
-    └── extract_box_server.py         # Box extraction orchestration server
+    ├── extract_box_server.py         # Box extraction orchestration server
+    └── pick_items_from_warehouse_server.py # Medicine picking orchestrator server
 ```
 
 ---
@@ -48,8 +52,8 @@ src/ros_control/
 CMake build configuration for the ROS2 package.
 
 **Key sections:**
-- **Action/message generation**: Generates ROS2 interfaces from `MoveJointGroup.action`, `GetContainer.action`, `PlaceContainer.action`, `NavigateToAddress.action`, `ExtractBox.action`, `Address.msg`
-- **Python script installation**: Installs `move_joint_group_server.py`, `gripper_service.py`, `get_container_server.py`, `place_container_server.py`, `navigate_to_address_server.py`, `extract_box_server.py` as executables
+- **Action/message generation**: Generates ROS2 interfaces from `MoveJointGroup.action`, `GetContainer.action`, `PlaceContainer.action`, `NavigateToAddress.action`, `ExtractBox.action`, `PickItemsFromWarehouse.action`, `Address.msg`, `Medicament.msg`
+- **Python script installation**: Installs `move_joint_group_server.py`, `gripper_service.py`, `get_container_server.py`, `place_container_server.py`, `navigate_to_address_server.py`, `extract_box_server.py`, `pick_items_from_warehouse_server.py` as executables
 - **Resource installation**: Installs `config/` and `launch/` directories
 
 **Dependencies:**
@@ -241,6 +245,34 @@ string current_phase         # "navigating", "extracting", "done"
 float32 progress_percentage  # 0-100%
 ```
 
+#### `action/PickItemsFromWarehouse.action`
+Defines the action interface for the medicine picking orchestrator.
+
+**Goal (Request):**
+```yaml
+ros_control/Medicament[] detection   # List of medicines to pick
+ros_control/Address box              # Source box address on the shelf
+```
+
+**Result (Response):**
+```yaml
+bool success                         # True if all items picked and placed
+string[] medicine_qr                 # DataMatrix codes of identified medicines
+uint8 items_picked                   # Count of successfully picked items
+uint8 items_total                    # Total items requested
+float64 execution_time               # Total execution time (seconds)
+string message                       # Result status message
+```
+
+**Feedback (Progress Updates):**
+```yaml
+string current_phase                 # Phase name (initializing, extracting_box, picking_items, finalizing)
+uint8 current_item_index             # Current item (0-based)
+uint8 total_items                    # Total items count
+float32 progress_percentage          # Overall progress 0-100%
+string message                       # Human-readable status
+```
+
 #### `msg/Address.msg`
 Message type representing a cabinet cell address.
 
@@ -249,6 +281,15 @@ string side       # Cabinet side: "left" or "right"
 uint8 cabinet_num # Cabinet number (0-based)
 uint8 row         # Row within cabinet (0-based)
 uint8 column      # Column within cabinet (0-based)
+```
+
+#### `msg/Medicament.msg`
+Medicine metadata for picking.
+
+```yaml
+string image_id                      # Unique image identifier for the medicine
+uint8 row_id                         # Row number within the box (0-based)
+geometry_msgs/Point box_center       # Approximate center in world coordinates (meters)
 ```
 
 ---
@@ -396,6 +437,21 @@ Configuration file for the ExtractBox action server.
 | `timeouts.navigate_timeout` | float | 60.0 | NavigateToAddress timeout (seconds) |
 | `timeouts.extract_timeout` | float | 30.0 | SCARA extraction timeout (seconds) |
 | `sensor.mock` | bool | true | Use mock sensor (always returns true) |
+
+#### `config/pick_items_from_warehouse_config.yaml`
+Configuration file for the PickItemsFromWarehouse action server.
+
+**Key Configuration Sections:**
+
+| Section | Description |
+|---------|-------------|
+| `safe_heights` | Z heights for safe transit, approach, and pick operations |
+| `pick_heights` | Grasp Z, offset, approach offset for two-stage descent |
+| `place_positions` | Container drop position (x, y, z) and item spacing |
+| `velocities` | Approach, pick, place, and transit velocity settings |
+| `timeouts` | Per-item and total timeout enforcement |
+| `behavior` | Continue-on-failure, detection retries, settle times |
+| `mock` | Mock vision provider enable/disable and grasp offsets |
 
 ---
 
@@ -610,6 +666,38 @@ High-level action server orchestrating box extraction from a cabinet cell.
 7. Return home (optional)
 8. Verify with box sensor
 
+#### `src/pick_items_from_warehouse_server.py`
+High-level orchestrator action server for the medicine picking workflow.
+
+**Class: `PickItemsFromWarehouseServer`**
+
+**Key Features:**
+- Orchestrates full picking workflow: extract box → pick medicines → place into container
+- Calls ExtractBox as sub-action with feedback relay (progress 5-40%)
+- Uses ScaraClient directly for pick-and-place loop (progress 40-90%)
+- VisionProvider abstraction (MockVisionProvider / future RealVisionProvider)
+- Per-item and total timeout enforcement
+- Detection retries with configurable max attempts
+- Two-stage approach descent (safe_z → approach_z → pick_z)
+- Cancellation forwarding to ExtractBox sub-goal
+
+**Dependencies:**
+
+| Interface | Type | Purpose |
+|-----------|------|---------|
+| `/extract_box` | Action | Extract box from shelf (navigate + SCARA hook) |
+| `ScaraClient` | Library | SCARA arm pick-and-place movements |
+| `/scara_tool/activate` | Service | Activate suction tool (non-fatal if unavailable) |
+| `/scara_tool/deactivate` | Service | Deactivate suction tool (non-fatal if unavailable) |
+
+**Execution Flow (4 phases):**
+1. **Initialize** (0-5%): Validate goal, create VisionProvider
+2. **Extract box** (5-40%): Call ExtractBox action, relay feedback
+3. **Pick items** (40-90%): For each medicine: detect → approach → pick → transit → place
+4. **Finalize** (90-100%): Return SCARA home, build result
+
+**See detailed documentation:** [pick_items_from_warehouse_action.md](pick_items_from_warehouse_action.md), [pick_items_from_warehouse_server.md](pick_items_from_warehouse_server.md)
+
 ---
 
 ### Launch Files
@@ -779,6 +867,7 @@ Launch file for starting the ExtractBox action server standalone.
 | `/place_container` | `ros_control/action/PlaceContainer` | `place_container_server` | Container place orchestration |
 | `/navigate_to_address` | `ros_control/action/NavigateToAddress` | `navigate_to_address_server` | Address-based platform navigation |
 | `/extract_box` | `ros_control/action/ExtractBox` | `extract_box_server` | Box extraction orchestration |
+| `/PickItems` | `ros_control/action/PickItemsFromWarehouse` | `pick_items_from_warehouse_server` | Medicine picking orchestrator |
 
 ### Action Clients
 
@@ -789,6 +878,7 @@ Launch file for starting the ExtractBox action server standalone.
 | `/move_joint_group` | `ros_control/action/MoveJointGroup` | `place_container_server` | Joint movement |
 | `/move_joint_group` | `ros_control/action/MoveJointGroup` | `navigate_to_address_server` | Platform movement |
 | `/navigate_to_address` | `ros_control/action/NavigateToAddress` | `extract_box_server` | Cell navigation |
+| `/extract_box` | `ros_control/action/ExtractBox` | `pick_items_from_warehouse_server` | Box extraction sub-action |
 
 ---
 
@@ -1024,6 +1114,8 @@ discovery:
 - **Gripper Service**: [gripper_service.md](gripper_service.md)
 - **GetContainer Server**: [get_container_server.md](get_container_server.md)
 - **PlaceContainer Server**: [place_container_server.md](place_container_server.md)
+- **PickItemsFromWarehouse Design**: [pick_items_from_warehouse_action.md](pick_items_from_warehouse_action.md)
+- **PickItemsFromWarehouse Server**: [pick_items_from_warehouse_server.md](pick_items_from_warehouse_server.md)
 - **Package README**: `src/ros_control/README.md`
 - **Manipulator Description**: `docs/manipulator_description/package_structure.md`
 - **SCARA Description**: `docs/scara_description/package_structure.md`

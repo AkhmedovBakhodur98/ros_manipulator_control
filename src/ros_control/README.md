@@ -1,27 +1,50 @@
 # ros_control Package
 
-Unified ROS2 control interface for moving multiple joints simultaneously across different controllers (manipulator, SCARA, gripper, and future equipment).
+Unified ROS2 control interface for the manipulator system. Provides action servers for joint movement, gripper control, container operations, platform navigation, box extraction, and medicine picking.
 
 ## Overview
 
-This package provides the `MoveJointGroup` action server that:
-- Dynamically discovers available controllers
-- Coordinates movement of multiple joints across different controllers
-- Supports both action-based (JointTrajectoryController) and topic-based (ForwardCommandController) controllers
-- Provides unified feedback and result reporting
+This package provides:
+- **MoveJointGroup** — Coordinated multi-joint movement across controllers
+- **GripperService** — Gripper open/close services
+- **GetContainer / PlaceContainer** — Container pick and place orchestration
+- **NavigateToAddress** — Address-based platform navigation
+- **ExtractBox** — Box extraction from shelf (navigate + SCARA hook retract)
+- **PickItemsFromWarehouse** — Orchestrator: extract box + pick medicines + place into container
 
 ## Package Structure
 
 ```
 ros_control/
 ├── action/
-│   └── MoveJointGroup.action          # Action definition
+│   ├── MoveJointGroup.action              # Joint movement action
+│   ├── GetContainer.action                # Container pick action
+│   ├── PlaceContainer.action              # Container place action
+│   ├── NavigateToAddress.action           # Platform navigation action
+│   ├── ExtractBox.action                  # Box extraction action
+│   └── PickItemsFromWarehouse.action      # Medicine picking orchestrator action
+├── msg/
+│   ├── Address.msg                        # Cabinet cell address
+│   └── Medicament.msg                     # Medicine metadata (image_id, row_id, box_center)
 ├── config/
-│   └── move_joint_group_config.yaml    # Configuration file
+│   ├── move_joint_group_config.yaml
+│   ├── gripper_config.yaml
+│   ├── get_container_config.yaml
+│   ├── place_container_config.yaml
+│   ├── navigate_to_address_config.yaml
+│   ├── extract_box_config.yaml
+│   └── pick_items_from_warehouse_config.yaml
 ├── launch/
-│   └── move_joint_group_server.launch.py
+│   ├── move_joint_group_server.launch.py
+│   └── extract_box_server.launch.py
 ├── src/
-│   └── move_joint_group_server.py     # Action server implementation
+│   ├── move_joint_group_server.py
+│   ├── gripper_service.py
+│   ├── get_container_server.py
+│   ├── place_container_server.py
+│   ├── navigate_to_address_server.py
+│   ├── extract_box_server.py
+│   └── pick_items_from_warehouse_server.py
 ├── CMakeLists.txt
 └── package.xml
 ```
@@ -128,8 +151,14 @@ To add support for new controllers, add them to the `known_mappings` dictionary 
 - `controller_manager_msgs` - For controller discovery
 - `pyyaml` - For configuration file parsing
 
-## Architecture
+## Documentation
 
-See `docs/ros_control/move_joint_group_architecture.md` for detailed architecture documentation.
+Full documentation: [docs/ros_control/](../../docs/ros_control/)
 
-
+- [package_structure.md](../../docs/ros_control/package_structure.md) — Package overview and ROS2 interfaces
+- [move_joint_group_server.md](../../docs/ros_control/move_joint_group_server.md) — Joint movement server
+- [gripper_service.md](../../docs/ros_control/gripper_service.md) — Gripper service
+- [get_container_server.md](../../docs/ros_control/get_container_server.md) — Container pick operations
+- [place_container_server.md](../../docs/ros_control/place_container_server.md) — Container place operations
+- [pick_items_from_warehouse_action.md](../../docs/ros_control/pick_items_from_warehouse_action.md) — Medicine picking design
+- [pick_items_from_warehouse_server.md](../../docs/ros_control/pick_items_from_warehouse_server.md) — Medicine picking server

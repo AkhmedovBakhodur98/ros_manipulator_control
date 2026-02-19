@@ -2,7 +2,7 @@
 
 ## Overview
 
-The **PickItemsFromWarehouse** action server orchestrates picking medicines from an extracted box and placing them into a shipping container. It uses the SCARA arm to perform pick-and-place operations. Vision data is provided through a pluggable provider interface — currently a mock implementation that returns configurable positions, designed to be replaced with real vision services (`/FindBox`, `/ContSide`) in the future.
+The **PickItemsFromWarehouse** action server is the orchestrator for the medicine picking workflow. It extracts a box from the shelf (via `/extract_box` action), picks medicines from it using the SCARA arm, and places them into a shipping container. Vision data is provided through a pluggable provider interface — currently a mock implementation that returns configurable positions, designed to be replaced with real vision services (`/FindBox`, `/ContSide`) in the future.
 
 **Node:** `src/ros_control/src/pick_items_from_warehouse_server.py`
 **Action:** `/PickItems`
@@ -15,18 +15,19 @@ The **PickItemsFromWarehouse** action server orchestrates picking medicines from
 ```
 POST /getmedicine (REST API)
     │
-    ├── GetContainer Action          ← attach shipping container
-    ├── NavigateToAddress Action      ← move platform to box cell
-    ├── ExtractBox Action            ← pull box out with SCARA hook
+    ├── GetContainer Action              ← attach shipping container
     │
-    ├── PickItemsFromWarehouse Action  ◄── THIS NODE
-    │       ├── VisionProvider.find_box()     (locate medicine in box)
-    │       ├── ScaraClient                   (pick medicine from box)
+    ├── PickItemsFromWarehouse Action    ◄── THIS NODE (orchestrator)
+    │       ├── ExtractBox Action              (navigate + extract box)
+    │       │       ├── NavigateToAddress       (move platform to cell)
+    │       │       └── ScaraClient             (hook + retract box)
+    │       ├── VisionProvider.find_box()       (locate medicine in box)
+    │       ├── ScaraClient                     (pick medicine from box)
     │       ├── VisionProvider.container_side() (find drop spot in container)
-    │       └── ScaraClient                   (place medicine into container)
+    │       └── ScaraClient                     (place medicine into container)
     │
-    ├── ReturnBox Action             ← push box back into shelf
-    └── PlaceContainer Action        ← return shipping container
+    ├── ReturnBox Action                 ← push box back into shelf
+    └── PlaceContainer Action            ← return shipping container
 ```
 
 ---
@@ -150,17 +151,21 @@ class MockVisionProvider(VisionProvider):
 
 ### Future: RealVisionProvider
 
-When real vision services are ready, a `RealVisionProvider` will replace the mock by calling actual ROS2 services (`/FindBox`, `/ContSide`). No changes to the action server logic — just swap the provider.
+When real vision services are ready, a `RealVisionProvider` will replace the mock by calling actual ROS2 services (`/FindBox`, `/ContSide`). No changes to the action server logic — just swap the provider. The `mock.enabled` config flag controls which provider is used; setting it to `false` currently raises `RuntimeError` until `RealVisionProvider` is implemented.
 
 ---
 
 ## Key Design Decisions
 
-### 1. VisionProvider abstraction instead of ROS2 services
+### 1. Orchestrator pattern — PickItems calls ExtractBox
 
-Vision is accessed through an internal Python ABC (`VisionProvider`), not ROS2 service interfaces. This avoids creating `.srv` files and service infrastructure that cannot be tested yet. The `MockVisionProvider` returns configurable positions computed from medicine metadata and config offsets. When real vision nodes are ready, a `RealVisionProvider` can be plugged in with zero changes to the action server logic.
+PickItemsFromWarehouse is the orchestrator for the full picking workflow. It calls `/extract_box` as a sub-action before starting the pick-and-place cycle. This means a single goal triggers the entire sequence: navigate platform → extract box → pick items → return home. Cancellation is forwarded to the active ExtractBox goal handle.
 
-### 2. Mock computes positions from input data
+### 2. VisionProvider abstraction instead of ROS2 services
+
+Vision is accessed through an internal Python ABC (`VisionProvider`), not ROS2 service interfaces. This avoids creating `.srv` files and service infrastructure that cannot be tested yet. The `MockVisionProvider` returns configurable positions computed from medicine metadata and config offsets. When real vision nodes are ready, a `RealVisionProvider` can be plugged in with zero changes to the action server logic. The `mock.enabled` config flag gates the provider selection.
+
+### 3. Mock computes positions from input data
 
 The mock doesn't return hardcoded values — it derives grasp positions from:
 - `medicament.box_center` (approximate world position from the goal)
@@ -169,25 +174,33 @@ The mock doesn't return hardcoded values — it derives grasp positions from:
 
 Drop positions use a base container position plus `item_spacing_x * item_index` to spread items across the container.
 
-### 3. ScaraClient used directly (not via ExtractBox sub-goal)
+### 4. ScaraClient used directly for pick-and-place
 
-Pick-and-place is a tight loop of small SCARA moves (approach -> pick -> transit -> place) that doesn't map to existing action servers. Using ScaraClient directly gives fine-grained control over each sub-move.
+Pick-and-place is a tight loop of small SCARA moves (approach -> pick -> transit -> place) that doesn't map to existing action servers. Using ScaraClient directly gives fine-grained control over each sub-move. Box extraction, however, is delegated to the ExtractBox action server.
 
-### 4. continue_on_item_failure strategy
+### 5. continue_on_item_failure strategy
 
 When one medicine fails to pick (e.g., mock reports invalid detection), the server continues to the next item by default. The result reports `items_picked` vs `items_total` so the caller knows partial success. This matches warehouse workflow: it's better to pick 9/10 items than to abort entirely.
 
-### 5. Cancellation handling
+### 6. Cancellation handling with sub-goal forwarding
 
-The server stores no sub-action-client goals (all interactions are ScaraClient calls which complete quickly). Cancellation is checked between items and between sub-phases within each item. On cancel, the server reports partial results.
+The server stores the active ExtractBox goal handle (`_active_extract_goal_handle`) for cancellation forwarding. During the pick-and-place phase, cancellation and per-item timeout are checked between each sub-step. On cancel, the server reports partial results.
 
-### 6. Tool failures are non-fatal
+### 7. Tool failures are non-fatal
 
 `trigger_tool()` failures are logged as warnings but do not abort the item. This allows the full pick-and-place sequence to run in mock hardware environments where no tool service (`/scara_tool/activate`, `/scara_tool/deactivate`) is available.
 
-### 7. Blocking sleep for settle times
+### 8. Blocking sleep for settle times
 
 Settle times after grasp/release use `time.sleep()` (blocking) instead of `asyncio.sleep()`. ROS2's `MultiThreadedExecutor` does not provide a standard asyncio event loop, so `asyncio.sleep()` raises `RuntimeError`. Blocking sleep is acceptable because the server runs in a `MultiThreadedExecutor` with `ReentrantCallbackGroup`, so one blocked thread does not stall the node.
+
+### 9. Timeout enforcement
+
+Both `per_item_timeout` and `total_timeout` are enforced. Total timeout is checked before each item in the main loop. Per-item timeout is checked at each cancellation checkpoint within `_pick_and_place_item`. Detection retries (`max_detection_retries`) wrap the `find_box()` call.
+
+### 10. Two-stage approach descent
+
+The approach uses `approach_offset_z` for an intermediate descent: safe_z → approach_z (grasp.z + offset) at approach velocity, then approach_z → pick_z (grasp.z - grasp_offset_z) at slower pick velocity. This gives controlled deceleration before contact.
 
 ---
 
@@ -214,4 +227,4 @@ Settle times after grasp/release use `time.sleep()` (blocking) instead of `async
 ## See Also
 
 - [pick_items_from_warehouse_server.md](pick_items_from_warehouse_server.md) — Implementation details
-- [extract_box_server.md](extract_box_server.md) — ExtractBox action server (upstream in pipeline)
+- [extract_box_server.md](extract_box_server.md) — ExtractBox action server (called as sub-action)

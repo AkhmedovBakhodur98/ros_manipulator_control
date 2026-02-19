@@ -1,12 +1,16 @@
 # PickItemsFromWarehouse Action Server
 
-Orchestrates picking medicines from an extracted box and placing them into a shipping container using the SCARA arm and a pluggable vision provider.
+Orchestrates the full medicine picking workflow: extracts a box from the shelf via `/extract_box`, picks medicines from it, and places them into a shipping container using the SCARA arm and a pluggable vision provider.
 
 ## Overview
 
-The PickItemsFromWarehouse action server performs pick-and-place operations for one or more medicines. It receives a list of medicine detections (with approximate positions), uses a vision provider to compute grasp and drop coordinates, and drives the SCARA arm through the pick-and-place cycle for each item.
+The PickItemsFromWarehouse action server is the top-level orchestrator for picking. It receives a list of medicine detections (with approximate positions) and a box address, then:
+1. Calls `/extract_box` to navigate the platform and extract the box
+2. Uses a vision provider to compute grasp and drop coordinates
+3. Drives the SCARA arm through the pick-and-place cycle for each item
 
 **Dependencies:**
+- `/extract_box` action server — navigates platform and extracts box from shelf
 - `ScaraClient` library (`scara_control`) — controls the SCARA arm (IK, Z-axis, tool)
 - `VisionProvider` — pluggable ABC for grasp/drop position computation (currently `MockVisionProvider`)
 
@@ -21,15 +25,19 @@ The PickItemsFromWarehouse action server performs pick-and-place operations for 
 │  Phase 1: Initialize              (0-5%)                         │
 │         Validate goal, check detection list non-empty            │
 │                                                                  │
-│  Phase 2: Per-item loop           (5-90%)                        │
-│         For each medicine in detection[]:                        │
-│         ┌─ 2a. Detect   ─► VisionProvider.find_box()            │
-│         ├─ 2b. Approach ─► move_z(safe) + move_to_point(grasp)  │
-│         ├─ 2c. Pick     ─► move_z(grasp) + trigger_tool(True)   │
-│         ├─ 2d. Find drop─► VisionProvider.container_side()       │
-│         └─ 2e. Place    ─► move_to_point(drop) + trigger_tool(F)│
+│  Phase 2: Extract box             (5-40%)                        │
+│         Call /extract_box action (navigate + SCARA extraction)   │
 │                                                                  │
-│  Phase 3: Finalize                (90-100%)                      │
+│  Phase 3: Per-item loop           (40-90%)                       │
+│         For each medicine in detection[]:                        │
+│         ┌─ 3a. Detect   ─► VisionProvider.find_box() + retries  │
+│         ├─ 3b. Approach ─► move_z(safe) + move_to_point(grasp)  │
+│         │                  + move_z(approach_z)                  │
+│         ├─ 3c. Pick     ─► move_z(pick_z) + trigger_tool(True)  │
+│         ├─ 3d. Find drop─► VisionProvider.container_side()       │
+│         └─ 3e. Place    ─► move_to_point(drop) + trigger_tool(F)│
+│                                                                  │
+│  Phase 4: Finalize                (90-100%)                      │
 │         Return SCARA home, compile results                       │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -39,34 +47,37 @@ The PickItemsFromWarehouse action server performs pick-and-place operations for 
 **Phase 1 — Initialize (0-5%)**
 Validate the goal. If the detection list is empty, abort with an error message.
 
-**Phase 2 — Per-item pick & place (5-90%)**
+**Phase 2 — Extract box (5-40%)**
+Call `/extract_box` action with the target box address. ExtractBox handles platform navigation and SCARA extraction internally. Feedback from ExtractBox is relayed and mapped to the 5-40% progress range. Cancellation is forwarded to the active ExtractBox goal. If extraction fails, the entire goal aborts.
+
+**Phase 3 — Per-item pick & place (40-90%)**
 For each medicine in the detection list, execute the full pick-and-place cycle:
 
 | Sub-step | Relative % | ScaraClient / Vision Method | Description |
 |----------|-----------|----------------------------|-------------|
-| 2a. Detect | 0-15% | `vision.find_box(medicament, box)` | Get grasp pose from vision provider |
-| 2b. Approach | 15-30% | `scara.move_z(safe_z)` + `scara.move_to_point(grasp_x, grasp_y)` | Raise Z for safe transit, move above grasp point |
-| 2c. Pick | 30-55% | `scara.move_z(grasp_z)` + `scara.trigger_tool(True)` + settle + `scara.move_z(safe_z)` | Lower to grasp, activate tool, wait, raise |
-| 2d. Find drop | 55-65% | `vision.container_side(item_index)` | Get drop position in container |
-| 2e. Place | 65-100% | `scara.move_to_point(drop_x, drop_y)` + `scara.move_z(drop_z)` + `scara.trigger_tool(False)` + settle + `scara.move_z(safe_z)` | Transit to container, lower, release, raise |
+| 3a. Detect | 0-15% | `vision.find_box(medicament, box)` with up to `max_detection_retries` | Get grasp pose from vision provider |
+| 3b. Approach | 15-30% | `scara.move_z(safe_z)` + `scara.move_to_point(grasp_x, grasp_y)` + `scara.move_z(approach_z)` | Raise Z, move XY, descend to approach height |
+| 3c. Pick | 30-55% | `scara.move_z(pick_z)` + `scara.trigger_tool(True)` + settle + `scara.move_z(safe_z)` | Descend to grasp, activate tool, wait, raise |
+| 3d. Find drop | 55-65% | `vision.container_side(item_index)` | Get drop position in container |
+| 3e. Place | 65-100% | `scara.move_to_point(drop_x, drop_y)` + `scara.move_z(drop_z)` + `scara.trigger_tool(False)` + settle + `scara.move_z(safe_z)` | Transit to container, lower, release, raise |
 
-Cancellation is checked between each sub-step. If an item fails and `continue_on_item_failure` is `true` (default), the server skips to the next item.
+Cancellation and per-item timeout are checked between each sub-step. If an item fails and `continue_on_item_failure` is `true` (default), the server skips to the next item. Total timeout is checked before starting each item.
 
-**Phase 3 — Finalize (90-100%)**
+**Phase 4 — Finalize (90-100%)**
 Return SCARA to home position (if `return_home_after_all` is `true`). Compile result with `items_picked`, `items_total`, and list of `medicine_qr` codes.
 
 ### Progress Mapping
 
-Per-item progress is evenly distributed across the 5-90% band:
+Per-item progress is evenly distributed across the 40-90% band:
 
 ```
-item_progress_start = 5.0 + (item_index / total_items) * 85.0
-item_progress_end   = 5.0 + ((item_index + 1) / total_items) * 85.0
+item_progress_start = 40.0 + (item_index / total_items) * 50.0
+item_progress_end   = 40.0 + ((item_index + 1) / total_items) * 50.0
 ```
 
 Example with 2 items:
-- Item 0: 5.0% — 47.5%
-- Item 1: 47.5% — 90.0%
+- Item 0: 40.0% — 65.0%
+- Item 1: 65.0% — 90.0%
 
 ---
 
@@ -100,7 +111,7 @@ float64 execution_time                # Total execution time (seconds)
 string message                        # Result status message
 ---
 # Feedback
-string current_phase                  # "initializing", "picking", "finalizing"
+string current_phase                  # "initializing", "extracting_box", "picking", "finalizing"
 uint8 current_item_index              # Current item (0-based)
 uint8 total_items                     # Total items count
 float32 progress_percentage           # Overall progress 0-100%
@@ -112,7 +123,8 @@ string message                        # Human-readable status
 | Phase | Progress | Description |
 |-------|----------|-------------|
 | initializing | 0-5% | Goal validation |
-| picking | 5-90% | Per-item detect → approach → pick → find drop → place cycle |
+| extracting_box | 5-40% | ExtractBox sub-action (navigate + extract) |
+| picking | 40-90% | Per-item detect → approach → pick → find drop → place cycle |
 | finalizing | 90-100% | SCARA home return, result compilation |
 
 ### Result: Partial Success
@@ -136,23 +148,23 @@ message: "Partial success: 2/3 items picked"
 ```
                     ┌──────────────────────────────┐
                     │ PickItemsFromWarehouse Server │
-                    │ (ROS2 Node)                   │
+                    │ (ROS2 Node — Orchestrator)    │
                     └──────┬───────────────────────┘
                            │
-               ┌───────────┼───────────┐
-               │                       │
-               ▼                       ▼
-     ┌──────────────────┐   ┌──────────────────────┐
-     │   ScaraClient    │   │   VisionProvider     │
-     │   (Library)      │   │   (Internal ABC)     │
-     └────────┬─────────┘   └──────────┬───────────┘
-              │                        │
-              ▼                        ▼
-     ┌──────────────────────┐   ┌─────────────────────┐
-     │ scara_controller     │   │ MockVisionProvider   │
-     │ + picker_z_controller│   │ (config-based poses) │
-     │ (SCARA joints + Z)  │   └─────────────────────┘
-     └──────────────────────┘
+            ┌──────────────┼──────────────┐
+            │              │              │
+            ▼              ▼              ▼
+  ┌──────────────────┐ ┌────────────┐ ┌──────────────────────┐
+  │  ExtractBox      │ │ ScaraClient│ │   VisionProvider     │
+  │  (Action Client) │ │ (Library)  │ │   (Internal ABC)     │
+  └────────┬─────────┘ └─────┬──────┘ └──────────┬───────────┘
+           │                 │                    │
+           ▼                 ▼                    ▼
+  ┌──────────────────┐ ┌──────────────────────┐ ┌─────────────────────┐
+  │ extract_box_server│ │ scara_controller     │ │ MockVisionProvider   │
+  │ (navigate+extract)│ │ + picker_z_controller│ │ (config-based poses) │
+  └──────────────────┘ │ (SCARA joints + Z)  │ └─────────────────────┘
+                       └──────────────────────┘
 ```
 
 ### ROS2 Interfaces Used
@@ -160,6 +172,7 @@ message: "Partial success: 2/3 items picked"
 | Interface | Type | Direction | Purpose |
 |-----------|------|-----------|---------|
 | `/PickItems` | Action Server | Incoming | This node's action interface |
+| `/extract_box` | Action Client | Outgoing | Box extraction (navigate + SCARA hook) |
 | `/scara_controller/follow_joint_trajectory` | Action Client | Outgoing | Via ScaraClient (arm motion) |
 | `/picker_z_controller/follow_joint_trajectory` | Action Client | Outgoing | Via ScaraClient (Z axis) |
 | `/scara_tool/activate` | Service Client | Outgoing | Via ScaraClient (tool on) — non-fatal if unavailable |
@@ -227,22 +240,22 @@ pick_items_from_warehouse_server:
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `pick_heights.safe_z` | float | `0.25` | Safe transit height [m] |
-| `pick_heights.approach_offset_z` | float | `0.05` | Height above grasp point for approach [m] |
+| `pick_heights.approach_offset_z` | float | `0.05` | Height above grasp point for intermediate descent [m] |
 | `pick_heights.grasp_offset_z` | float | `0.005` | Extra depth below grasp point [m] |
 | `pick_heights.place_offset_z` | float | `0.02` | Height above drop point for release [m] |
-| `motion.approach_velocity` | float | `0.3` | Velocity for approach moves (0-1) |
-| `motion.pick_velocity` | float | `0.1` | Velocity for pick (slow, precise) |
+| `motion.approach_velocity` | float | `0.3` | Velocity for approach moves and intermediate descent (0-1) |
+| `motion.pick_velocity` | float | `0.1` | Velocity for final descent to grasp (slow, precise) |
 | `motion.transit_velocity` | float | `0.5` | Velocity for transit between box and container |
 | `motion.place_velocity` | float | `0.2` | Velocity for place |
-| `motion.z_velocity` | float | `0.1` | Z-axis velocity |
+| `motion.z_velocity` | float | `0.1` | Z-axis velocity for safe height moves |
 | `tool.settle_time_after_grasp` | float | `0.5` | Wait after activating tool [s] |
 | `tool.settle_time_after_release` | float | `0.3` | Wait after deactivating tool [s] |
-| `timeouts.per_item_timeout` | float | `60.0` | Max time per single item [s] |
+| `timeouts.per_item_timeout` | float | `60.0` | Max time per single item pick-place [s] |
 | `timeouts.total_timeout` | float | `300.0` | Max total execution time [s] |
 | `behavior.continue_on_item_failure` | bool | `true` | Continue to next item if one fails |
 | `behavior.return_home_after_all` | bool | `true` | Return SCARA home after all items |
-| `behavior.max_detection_retries` | int | `2` | Retry find_box on failure |
-| `mock.enabled` | bool | `true` | Use MockVisionProvider |
+| `behavior.max_detection_retries` | int | `2` | Number of retries for find_box on failure |
+| `mock.enabled` | bool | `true` | Use MockVisionProvider (false raises RuntimeError until RealVisionProvider exists) |
 | `mock.grasp_offset_x` | float | `0.15` | Grasp X offset from box_center [m] |
 | `mock.grasp_offset_y` | float | `0.0` | Grasp Y offset from box_center [m] |
 | `mock.grasp_z` | float | `0.10` | Grasp Z height [m] |
@@ -263,7 +276,7 @@ The server loads config from `pick_items_from_warehouse_config.yaml` with deep-m
 ### Command Line
 
 ```bash
-# Pick 1 medicine
+# Pick 1 medicine (extracts box automatically)
 ros2 action send_goal /PickItems ros_control/action/PickItemsFromWarehouse "{
   detection: [{image_id: 'med-001', row_id: 0, box_center: {x: 0.1, y: 0.0, z: 0.1}}],
   box: {side: 'left', cabinet_num: 2, row: 1, column: 0}
@@ -372,7 +385,7 @@ ros2 launch manipulator_bringup manipulator_bringup.launch.py use_scara:=true
 Startup sequence:
 1. `joint_state_broadcaster` spawns
 2. `scara_controller` spawns
-3. `pick_items_from_warehouse_server` starts (triggered by `scara_controller` exit)
+3. `extract_box_server` and `pick_items_from_warehouse_server` start (triggered by `scara_controller` exit)
 
 The server is wrapped with `IfCondition(use_scara)` — it only launches when SCARA is enabled.
 
@@ -382,7 +395,7 @@ The server is wrapped with `IfCondition(use_scara)` — it only launches when SC
 ros2 run ros_control pick_items_from_warehouse_server.py
 ```
 
-Requires `scara_controller` and `picker_z_controller` to be running.
+Requires `scara_controller`, `picker_z_controller`, and `extract_box_server` to be running.
 
 ---
 
@@ -391,23 +404,44 @@ Requires `scara_controller` and `picker_z_controller` to be running.
 | Error | Phase | Result |
 |-------|-------|--------|
 | Empty detection list | initializing | success=False, message="No items in detection list" |
-| Vision detection failed | picking (2a) | Item skipped (if continue_on_item_failure), else abort |
-| SCARA motion failed (IK, limits) | picking (2b-2e) | Item fails with specific message |
-| Tool activate/deactivate failed | picking (2c/2e) | Logged as warning, continues (non-fatal) |
-| Container detection failed | picking (2d) | Item fails, "Container detection failed" |
+| ExtractBox server not available | extracting_box | success=False, message="ExtractBox action server not available" |
+| ExtractBox goal rejected | extracting_box | success=False, message="ExtractBox goal rejected" |
+| ExtractBox failed | extracting_box | success=False, message="Box extraction failed: ..." |
+| ExtractBox canceled | extracting_box | Goal canceled, partial results returned |
+| Total timeout exceeded | picking (before item) | success=False, message="Total timeout (300s) exceeded after N/M items" |
+| Per-item timeout exceeded | picking (3a-3e) | Item fails, "Per-item timeout (60s) exceeded" |
+| Vision detection failed | picking (3a) | Item fails after `max_detection_retries + 1` attempts |
+| SCARA motion failed (IK, limits) | picking (3b-3e) | Item fails with specific message |
+| Tool activate/deactivate failed | picking (3c/3e) | Logged as warning, continues (non-fatal) |
+| Container detection failed | picking (3d) | Item fails, "Container detection failed" |
 | All items picked | finalizing | success=True |
 | Some items failed | finalizing | success=False, items_picked < items_total |
 
 ### Cancellation
 
-Cancellation is checked between each sub-step within an item and between items:
-1. `goal_handle.is_cancel_requested` polled at 7 points per item cycle
-2. On cancel: current SCARA motion completes (safe stop), partial results returned
-3. Result includes `medicine_qr` and `items_picked` for successfully completed items
+Cancellation is checked at multiple points:
+1. After ExtractBox completes — forwarded via `_active_extract_goal_handle.cancel_goal_async()`
+2. Before each item in the main loop
+3. Between each sub-step within an item (7 checkpoints per item)
+4. Per-item timeout is also checked at each of these 7 checkpoints
+
+On cancel: current motion completes (safe stop), partial results returned with `medicine_qr` and `items_picked` for successfully completed items.
 
 ---
 
 ## Implementation Notes
+
+### Two-Stage Approach Descent
+
+The approach phase uses a two-stage Z descent:
+1. `safe_z` (0.25m) → `approach_z` (grasp.z + approach_offset_z = 0.15m) at `approach_velocity`
+2. `approach_z` (0.15m) → `pick_z` (grasp.z - grasp_offset_z = 0.095m) at `pick_velocity`
+
+This gives controlled deceleration before contact with the medicine.
+
+### Detection Retries
+
+`find_box()` is called up to `1 + max_detection_retries` times (default: 3 attempts). Each failed attempt is logged as a warning. If all attempts fail, the item is skipped (with `continue_on_item_failure`) or the goal aborts.
 
 ### Tool Service in Mock Hardware
 
@@ -449,5 +483,5 @@ This spreads picked items along the X axis in the container.
 ## See Also
 
 - [pick_items_from_warehouse_action.md](pick_items_from_warehouse_action.md) — Architectural design and design decisions
-- [extract_box_server.md](extract_box_server.md) — ExtractBox action server (upstream in pipeline)
+- [extract_box_server.md](extract_box_server.md) — ExtractBox action server (called as sub-action)
 - [package_structure.md](package_structure.md) — Full package documentation

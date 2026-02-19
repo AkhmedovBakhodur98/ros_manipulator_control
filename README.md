@@ -8,7 +8,8 @@ ROS2 control system for an industrial manipulator with optional SCARA arm. Provi
 |---------|-------------|
 | `manipulator_description` | Robot model (URDF/xacro), meshes, controllers config |
 | `scara_description` | Optional SCARA arm module (3-DOF, attaches to picker_frame) |
-| `ros_control` | Unified control interface: joint movement, gripper, container operations |
+| `ros_control` | Unified control interface: joint movement, gripper, container operations, medicine picking |
+| `scara_control` | SCARA arm control library (ScaraClient: IK/FK, linear motion, pick/place) |
 | `rest_api_bridge` | REST API layer for external WMS integration (FastAPI + JWT auth) |
 | `manipulator_bringup` | Launch files for full system startup |
 
@@ -51,6 +52,14 @@ ros2 action send_goal /place_container ros_control/action/PlaceContainer "{}" --
 # Navigate to cabinet address
 ros2 action send_goal /navigate_to_address ros_control/action/NavigateToAddress \
   "{side: 'left', cabinet_num: 2, row: 1, column: 0}" --feedback
+
+# Extract box from shelf
+ros2 action send_goal /extract_box ros_control/action/ExtractBox \
+  "{box: {side: 'left', cabinet_num: 2, row: 1, column: 0}}" --feedback
+
+# Pick medicines from box (orchestrator: extract box + pick + place into container)
+ros2 action send_goal /PickItems ros_control/action/PickItemsFromWarehouse \
+  "{detection: [{image_id: 'med-001', row_id: 0, box_center: {x: 0.0, y: 0.0, z: 0.0}}], box: {side: 'left', cabinet_num: 2, row: 1, column: 0}}" --feedback
 
 # Gripper
 ros2 service call /gripper/open std_srvs/srv/Trigger
@@ -113,14 +122,17 @@ src/
 │   └── launch/                    # display.launch.py, scara_control.launch.py
 │
 ├── ros_control/                   # Unified control interface
-│   ├── action/                    # MoveJointGroup, GetContainer, PlaceContainer, NavigateToAddress
+│   ├── action/                    # MoveJointGroup, GetContainer, PlaceContainer, NavigateToAddress, ExtractBox, PickItemsFromWarehouse
+│   ├── msg/                       # Address, Medicament
 │   ├── config/                    # Server configurations
 │   └── src/                       # Server implementations
 │       ├── move_joint_group_server.py
 │       ├── gripper_service.py
 │       ├── get_container_server.py
 │       ├── place_container_server.py
-│       └── navigate_to_address_server.py
+│       ├── navigate_to_address_server.py
+│       ├── extract_box_server.py
+│       └── pick_items_from_warehouse_server.py
 │
 ├── rest_api_bridge/               # REST API for external WMS
 │   ├── rest_api_bridge/           # Python package
@@ -147,6 +159,8 @@ src/
 | `/get_container` | `ros_control/action/GetContainer` | Container pick (open -> move -> grab -> lift) |
 | `/place_container` | `ros_control/action/PlaceContainer` | Container place (move -> release -> retract) |
 | `/navigate_to_address` | `ros_control/action/NavigateToAddress` | Navigate platform to cabinet address (side, cabinet, row, column) |
+| `/extract_box` | `ros_control/action/ExtractBox` | Extract box from shelf (navigate + SCARA hook retract) |
+| `/PickItems` | `ros_control/action/PickItemsFromWarehouse` | Orchestrator: extract box + pick medicines + place into container |
 
 ### Services
 
@@ -180,6 +194,9 @@ Full documentation is in the [docs/](docs/) directory:
 - [docs/ros_control/get_container_server.md](docs/ros_control/get_container_server.md) - Container pick operations
 - [docs/ros_control/place_container_server.md](docs/ros_control/place_container_server.md) - Container place operations
 - [docs/ros_control/navigate_to_address_server.md](docs/ros_control/navigate_to_address_server.md) - Address-based platform navigation
+- [docs/ros_control/extract_box_server.md](docs/ros_control/extract_box_server.md) - Box extraction from shelf
+- [docs/ros_control/pick_items_from_warehouse_action.md](docs/ros_control/pick_items_from_warehouse_action.md) - Medicine picking orchestrator design
+- [docs/ros_control/pick_items_from_warehouse_server.md](docs/ros_control/pick_items_from_warehouse_server.md) - Medicine picking server implementation
 - [docs/rest_api_bridge/package_structure.md](docs/rest_api_bridge/package_structure.md) - REST API complete reference
 - [docs/rest_api_bridge/API_CLIENT_GUIDE_RU.md](docs/rest_api_bridge/API_CLIENT_GUIDE_RU.md) - API client integration guide (Russian)
 - [docs/manipulator_bringup/launch_files.md](docs/manipulator_bringup/launch_files.md) - Launch file reference
