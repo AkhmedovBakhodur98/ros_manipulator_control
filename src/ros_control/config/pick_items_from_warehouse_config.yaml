@@ -1,0 +1,47 @@
+pick_items_from_warehouse_server:
+  ros__parameters:
+    # Heights for SCARA Z-axis during pick operations
+    pick_heights:
+      safe_z: 0.25                    # Safe transit height (meters)
+      approach_offset_z: 0.05         # Height above grasp point for approach
+      grasp_offset_z: 0.005           # Extra depth below grasp point
+      place_offset_z: 0.02            # Height above drop point for release
+
+    # Motion parameters
+    motion:
+      approach_velocity: 0.3          # Velocity for approach moves (fraction 0-1)
+      pick_velocity: 0.1              # Velocity for pick (slow, precise)
+      transit_velocity: 0.5           # Velocity for transit between box and container
+      place_velocity: 0.2             # Velocity for place
+      z_velocity: 0.1                 # Z-axis velocity
+
+    # Tool (vacuum/gripper) control
+    tool:
+      settle_time_after_grasp: 0.5    # Wait time after activating tool (seconds)
+      settle_time_after_release: 0.3  # Wait time after deactivating tool (seconds)
+
+    # Timeouts
+    timeouts:
+      per_item_timeout: 60.0          # Max time per single item pick-place
+      total_timeout: 300.0            # Max total execution time
+
+    # Behavior
+    behavior:
+      continue_on_item_failure: true  # Continue to next item if one fails
+      return_home_after_all: true     # Return SCARA home after all items
+      max_detection_retries: 2        # Retry find_box on failure
+
+    # Mock vision provider configuration
+    mock:
+      enabled: true                   # Use MockVisionProvider
+      grasp_offset_x: 0.15           # Grasp X offset from box_center (meters)
+      grasp_offset_y: 0.0            # Grasp Y offset from box_center (meters)
+      grasp_z: 0.10                  # Grasp Z height (meters)
+      row_spacing_y: 0.05            # Y spacing between rows in box (meters)
+      place_x: 0.20                  # Container drop X (meters)
+      place_y: -0.15                 # Container drop Y (meters)
+      place_z: 0.10                  # Container drop Z (meters)
+      item_spacing_x: 0.06           # X spacing between placed items (meters)
+      default_box_length: 0.10       # Default medicine box length (meters)
+      default_box_width: 0.04        # Default medicine box width (meters)
+      default_box_height: 0.03       # Default medicine box height (meters)

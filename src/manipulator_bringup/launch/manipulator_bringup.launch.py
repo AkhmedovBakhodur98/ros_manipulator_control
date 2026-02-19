@@ -105,6 +105,7 @@ def generate_launch_description():
     place_container_config_file = PathJoinSubstitution([ros_control_pkg_share, 'config', 'place_container_config.yaml'])
     navigate_to_address_config_file = PathJoinSubstitution([ros_control_pkg_share, 'config', 'navigate_to_address_config.yaml'])
     extract_box_config_file = PathJoinSubstitution([ros_control_pkg_share, 'config', 'extract_box_config.yaml'])
+    pick_items_config_file = PathJoinSubstitution([ros_control_pkg_share, 'config', 'pick_items_from_warehouse_config.yaml'])
 
     # Launch arguments
     use_sim_time = LaunchConfiguration('use_sim_time')
@@ -497,6 +498,45 @@ def generate_launch_description():
         )
     )
 
+    # PickItemsFromWarehouse action server node (requires ScaraClient)
+    def create_pick_items_server(context):
+        """Create pick_items_from_warehouse_server node with config file parameters"""
+        try:
+            use_sim_time_val = context.launch_configurations.get('use_sim_time', 'false') == 'true'
+            config_file = str(pick_items_config_file.perform(context))
+
+            print(f"[manipulator_bringup] Creating pick_items_from_warehouse_server node...")
+            print(f"[manipulator_bringup]   config_file: {config_file}")
+
+            node = Node(
+                package='ros_control',
+                executable='pick_items_from_warehouse_server.py',
+                name='pick_items_from_warehouse_server',
+                output='screen',
+                parameters=[
+                    {'use_sim_time': use_sim_time_val},
+                    config_file
+                ],
+                condition=IfCondition(use_scara)
+            )
+            print(f"[manipulator_bringup] pick_items_from_warehouse_server node created successfully")
+            return [node]
+        except Exception as e:
+            print(f"[manipulator_bringup] ERROR creating pick_items_from_warehouse_server: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+
+    pick_items_server_action = OpaqueFunction(function=create_pick_items_server)
+
+    # Event handler: start pick_items_server after scara_controller is spawned
+    delayed_pick_items_server = RegisterEventHandler(
+        event_handler=OnProcessExit(
+            target_action=spawn_scara_controller,
+            on_exit=[pick_items_server_action]
+        )
+    )
+
     # RViz2 node (optional)
     rviz_node = Node(
         package='rviz2',
@@ -527,6 +567,7 @@ def generate_launch_description():
         delayed_place_container_server,  # Starts after gripper_controller is spawned
         delayed_navigate_to_address_server,  # Starts after manipulator_controller is spawned
         delayed_extract_box_server,  # Starts after scara_controller is spawned (SCARA only)
+        delayed_pick_items_server,  # Starts after scara_controller is spawned (SCARA only)
         rviz_node
     ])
 

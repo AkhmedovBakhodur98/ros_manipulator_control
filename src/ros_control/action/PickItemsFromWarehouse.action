@@ -1,0 +1,18 @@
+# Goal
+ros_control/Medicament[] detection
+ros_control/Address box
+---
+# Result
+bool success
+string[] medicine_qr
+uint8 items_picked
+uint8 items_total
+float64 execution_time
+string message
+---
+# Feedback
+string current_phase
+uint8 current_item_index
+uint8 total_items
+float32 progress_percentage
+string message
