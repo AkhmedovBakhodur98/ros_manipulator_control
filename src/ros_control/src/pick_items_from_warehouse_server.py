@@ -547,7 +547,7 @@ class PickItemsFromWarehouseServer(Node):
         def _is_timed_out() -> bool:
             return (time.time() - item_start_time) > per_item_timeout
 
-        # --- 2a. Detect item ---
+        # --- 3a. Detect item ---
         _publish(f'Detecting item {index + 1}', 0.0)
 
         max_retries = self.config['behavior']['max_detection_retries']
@@ -574,7 +574,7 @@ class PickItemsFromWarehouseServer(Node):
         if _is_timed_out():
             return False, f'Per-item timeout ({per_item_timeout:.0f}s) exceeded'
 
-        # --- 2b. Approach ---
+        # --- 3b. Approach ---
         _publish(f'Approaching item {index + 1}', 15.0)
 
         result = await self.scara.move_z(safe_z, velocity=cfg_motion['z_velocity'])
@@ -609,7 +609,7 @@ class PickItemsFromWarehouseServer(Node):
         if _is_timed_out():
             return False, f'Per-item timeout ({per_item_timeout:.0f}s) exceeded'
 
-        # --- 2c. Pick ---
+        # --- 3c. Pick ---
         _publish(f'Picking item {index + 1}', 30.0)
 
         pick_z = grasp.z - cfg_heights['grasp_offset_z']
@@ -632,7 +632,7 @@ class PickItemsFromWarehouseServer(Node):
         if _is_timed_out():
             return False, f'Per-item timeout ({per_item_timeout:.0f}s) exceeded'
 
-        # --- 2d. Detect drop point ---
+        # --- 3d. Detect drop point ---
         _publish(f'Finding drop point for item {index + 1}', 55.0)
 
         success, drop_point = self.vision.container_side(index)
@@ -648,7 +648,7 @@ class PickItemsFromWarehouseServer(Node):
         if _is_timed_out():
             return False, f'Per-item timeout ({per_item_timeout:.0f}s) exceeded'
 
-        # --- 2e. Place ---
+        # --- 3e. Place ---
         _publish(f'Placing item {index + 1}', 65.0)
 
         result = await self.scara.move_to_point(

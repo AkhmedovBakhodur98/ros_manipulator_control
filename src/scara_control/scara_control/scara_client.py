@@ -621,6 +621,8 @@ class ScaraClient:
         velocity: float = 0.1,
         step_size: float = 0.005,
         allow_elbow_flip: bool = False,
+        on_before_flip: Callable = None,
+        on_after_flip: Callable = None,
     ) -> ScaraResult:
         """Straight-line TCP motion. Z first, then linear XY."""
         t0 = time.time()
@@ -660,6 +662,8 @@ class ScaraClient:
                     return await self.move_linear_with_flip(
                         x, y, z=None, orientation=orientation,
                         velocity=velocity, step_size=step_size,
+                        on_before_flip=on_before_flip,
+                        on_after_flip=on_after_flip,
                     )
                 return self._build_result(
                     False, f'Waypoint {i}/{n_steps} unreachable: {exc}', t0)
@@ -669,6 +673,8 @@ class ScaraClient:
                     return await self.move_linear_with_flip(
                         x, y, z=None, orientation=orientation,
                         velocity=velocity, step_size=step_size,
+                        on_before_flip=on_before_flip,
+                        on_after_flip=on_after_flip,
                     )
                 return self._build_result(
                     False,

@@ -425,6 +425,7 @@ Configuration file for the ExtractBox action server.
 |-----------|------|---------|-------------|
 | `hook_grasp.wrist_angle_rad` | float | 1.5708 | Hook orientation angle (sign auto from side) |
 | `hook_grasp.z_offset_m` | float | 0.03 | Raise/lower distance to clear handle plate |
+| `hook_grasp.z_above_box_m` | float | 0.10 | Raise distance to clear entire box (overhook disengage) |
 | `hook_grasp.approach_depth_m` | float | 0.20 | How far arm reaches into cabinet (Y axis) |
 | `hook_grasp.approach_x_offset_m` | float | 0.20 | X offset — keeps approach within shoulder limits |
 | `hook_grasp.y_inside_m` | float | 0.02 | Extra depth inside box edge |

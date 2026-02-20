@@ -238,6 +238,8 @@ async def move_linear(
     velocity: float = 0.1,     # linear velocity [m/s]
     step_size: float = 0.005,  # interpolation step [m]
     allow_elbow_flip: bool = False,  # allow mid-path elbow reconfiguration
+    on_before_flip: Callable = None,  # callback before elbow flip (e.g. raise Z)
+    on_after_flip: Callable = None,   # callback after elbow flip (e.g. lower Z)
 ) -> ScaraResult:
     """
     Move TCP in a straight line in Cartesian space.
@@ -253,7 +255,7 @@ async def move_linear(
 4. Interpolate intermediate points along the line with `step_size` spacing
 5. For each waypoint: compute IK (consistent elbow configuration)
 6. **Verify linearity**: for each waypoint, compute FK from IK result and check deviation from intended straight line. If max deviation > `max_deviation` (default 5mm) — return error
-7. If a waypoint hits joint limits and `allow_elbow_flip=True` — detect flip point and split trajectory (see 3.6)
+7. If a waypoint hits joint limits and `allow_elbow_flip=True` — detect flip point and delegate to `move_linear_with_flip()` with `on_before_flip` / `on_after_flip` callbacks forwarded
 8. If any waypoint is unreachable or outside joint limits (and no flip allowed) — return error before moving
 9. Build multi-point `FollowJointTrajectory` with timestamps based on `velocity`
 10. Send trajectory to `scara_controller`, wait for result

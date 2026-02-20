@@ -4,6 +4,7 @@ extract_box_server:
     hook_grasp:
       wrist_angle_rad: 1.5708       # ±π/2 — hook orientation (sign auto from side)
       z_offset_m: 0.03              # Raise/lower distance to clear handle plate
+      z_above_box_m: 0.10            # Raise distance to clear entire box (overhook disengage)
       approach_depth_m: 0.20        # How far arm reaches into cabinet (Y axis)
       approach_x_offset_m: 0.20     # X offset for approach — keeps arm within shoulder limits
       y_inside_m: 0.02              # Extra depth inside box edge

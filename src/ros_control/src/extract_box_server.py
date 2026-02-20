@@ -134,6 +134,7 @@ class ExtractBoxServer(Node):
             'hook_grasp': {
                 'wrist_angle_rad': math.pi / 2,
                 'z_offset_m': 0.03,
+                'z_above_box_m': 0.10,
                 'approach_depth_m': 0.20,
                 'approach_x_offset_m': 0.20,
                 'y_inside_m': 0.02,
@@ -356,7 +357,7 @@ class ExtractBoxServer(Node):
     # ------------------------------------------------------------------
 
     async def _extract_box(self, box, nav_result, goal_handle, feedback):
-        """Execute 6-step SCARA extraction sequence.
+        """Execute 7-step SCARA extraction sequence.
 
         Returns:
             (True, message) on success
@@ -393,8 +394,9 @@ class ExtractBoxServer(Node):
         if abort:
             return False, msg
 
-        # --- 2b. Raise Z ---
+        # --- 2b. Raise Z (above handle plate) ---
         z_offset = cfg_grasp['z_offset_m']
+        z_above_box = cfg_grasp['z_above_box_m']
         current_z = self.scara.get_z_position()
         target_z_up = current_z + z_offset
 
@@ -430,7 +432,7 @@ class ExtractBoxServer(Node):
         if abort:
             return False, msg
 
-        # --- 2d. Lower Z (hook drops into gap) ---
+        # --- 2d. Lower Z (hook engages under handle plate) ---
         current_z = self.scara.get_z_position()
         target_z_down = current_z - z_offset
 
@@ -460,11 +462,31 @@ class ExtractBoxServer(Node):
         feedback.progress_percentage = 75.0
         goal_handle.publish_feedback(feedback)
 
+        async def _raise_z_before_flip():
+            self.get_logger().info(
+                f'Step 2e: Raising Z +{z_above_box}m before elbow flip'
+            )
+            await self.scara.move_z(
+                self.scara.get_z_position() + z_above_box,
+                velocity=cfg_grasp['z_lower_velocity'],
+            )
+
+        async def _lower_z_after_flip():
+            self.get_logger().info(
+                f'Step 2e: Lowering Z -{z_above_box}m after elbow flip'
+            )
+            await self.scara.move_z(
+                self.scara.get_z_position() - z_above_box,
+                velocity=cfg_grasp['z_lower_velocity'],
+            )
+
         result = await self.scara.move_linear(
             x=retract_x, y=retract_y,
             velocity=cfg_motion['retract_velocity'],
             step_size=cfg_motion['linear_step_size'],
             allow_elbow_flip=True,
+            on_before_flip=_raise_z_before_flip,
+            on_after_flip=_lower_z_after_flip,
         )
         if not result.success:
             return False, f'Retract failed: {result.message}'
@@ -473,15 +495,46 @@ class ExtractBoxServer(Node):
         if abort:
             return False, msg
 
-        # --- 2f. Home (optional) ---
+        # --- 2f. Raise Z (disengage hook before going home) ---
+        current_z = self.scara.get_z_position()
+        target_z_disengage = current_z + z_above_box
+
+        self.get_logger().info(
+            f'Step 2f: Raising Z from {current_z:.4f} to {target_z_disengage:.4f} '
+            f'(disengage hook)'
+        )
+        feedback.progress_percentage = 80.0
+        goal_handle.publish_feedback(feedback)
+
+        result = await self.scara.move_z(
+            target_z_disengage, velocity=cfg_grasp['z_lower_velocity']
+        )
+        if not result.success:
+            return False, f'Z raise (disengage) failed: {result.message}'
+
+        abort, msg = _check_abort()
+        if abort:
+            return False, msg
+
+        # --- 2g. Home (optional) ---
+        # Cannot use move_home() — it lowers Z first, which would undo
+        # step 2f and drag the hook.  Instead: move arm joints home
+        # (Z stays raised), then lower Z.
         if cfg_motion['return_home']:
-            self.get_logger().info('Step 2f: Returning to home position')
+            self.get_logger().info('Step 2g: Moving arm to home (Z stays raised)')
             feedback.progress_percentage = 85.0
             goal_handle.publish_feedback(feedback)
 
-            result = await self.scara.move_home()
+            result = await self.scara.move_joints(
+                shoulder=0.0, elbow=0.0, wrist=0.0,
+            )
             if not result.success:
-                return False, f'Home return failed: {result.message}'
+                return False, f'Arm home failed: {result.message}'
+
+            self.get_logger().info('Step 2g: Lowering Z to home')
+            result = await self.scara.move_z(0.0, velocity=0.1)
+            if not result.success:
+                return False, f'Z home failed: {result.message}'
 
         feedback.progress_percentage = 90.0
         goal_handle.publish_feedback(feedback)

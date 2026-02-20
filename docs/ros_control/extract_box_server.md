@@ -39,7 +39,7 @@ The ExtractBox action server provides a high-level interface for extracting a bo
 Send NavigateToAddress goal with the address from ExtractBox goal. Relay progress from NavigateToAddress feedback (0.0-1.0) mapped to 0-40% range. If navigation fails, abort immediately.
 
 **Step 2 — Extract with SCARA (40-90%)**
-Six-step hook-based extraction using `ScaraClient`:
+Seven-step hook-based extraction using `ScaraClient`:
 
 ```
 SCARA EXTRACTION SEQUENCE (side view)
@@ -49,12 +49,12 @@ SCARA EXTRACTION SEQUENCE (side view)
         │  ┌───────┐ box
         │  │       │
         │  │  ┌─┐  │         1. ROTATE     wrist → ±90° (hook orientation)
-        │  │  │h│  │         2. RAISE Z    ↑ picker goes up by z_offset
+        │  │  │h│  │         2. RAISE Z    ↑ above handle plate (+0.03m)
         │  │  │a│  │         3. APPROACH   arm extends into cabinet
-        │  │  │n│  │         4. LOWER Z    ↓ hook drops into gap
+        │  │  │n│  │         4. LOWER Z    ↓ hook drops into gap (-0.03m)
         │  │  │d│  │         5. RETRACT    ← pull box out (pure Y linear)
-        │  │  │l│  │         6. HOME       arm returns to home (optional)
-        │  │  │e│  │
+        │  │  │l│  │         6. RAISE Z    ↑ disengage hook above box (+0.10m)
+        │  │  │e│  │         7. HOME       arm returns to home (optional)
         │  └──┴─┴──┘
         │
               ← SCARA arm
@@ -63,11 +63,12 @@ SCARA EXTRACTION SEQUENCE (side view)
 | Sub-step | Progress | ScaraClient Method | Description |
 |----------|----------|--------------------|-------------|
 | 2a. Rotate wrist | 42% | `move_joints(wrist=±π/2)` | Orient hook (left=+90°, right=-90°) |
-| 2b. Raise Z | 48% | `move_z(current_z + z_offset)` | Raise picker above handle plate |
+| 2b. Raise Z | 48% | `move_z(current_z + z_offset)` | Raise picker above handle plate (+0.03m) |
 | 2c. Approach | 55% | `move_to_point(x, y)` | Extend arm into cabinet (joint-space motion) |
-| 2d. Lower Z | 65% | `move_z(current_z - z_offset)` | Hook drops into gap under handle plate |
-| 2e. Retract | 75% | `move_linear(x, y, allow_elbow_flip=True)` | Pull box fully out — Y linear motion with elbow flip |
-| 2f. Home | 85% | `move_home()` | Return arm to home position (if `return_home: true`) |
+| 2d. Lower Z | 65% | `move_z(current_z - z_offset)` | Hook drops into gap under handle plate (-0.03m) |
+| 2e. Retract | 75% | `move_linear(x, y, allow_elbow_flip=True, on_before_flip, on_after_flip)` | Pull box out — raises Z before elbow flip, lowers after |
+| 2f. Raise Z | 80% | `move_z(current_z + z_above_box)` | Disengage hook — raise above box before going home |
+| 2g. Home | 85% | `move_joints(0,0,0)` then `move_z(0)` | Arm joints home first (Z stays raised), then lower Z |
 
 **Approach target computation:**
 The approach target is computed in SCARA base frame. After navigation aligns the platform with the cell, the SCARA only needs to reach sideways (±Y) into the cabinet:
@@ -90,7 +91,7 @@ retract: (approach_x, approach_y) → (approach_x, ∓retract_overshoot_m)
 
 Total retract distance = `approach_depth_m + y_inside_m + retract_overshoot_m` (default: 0.22 + 0.38 = 0.60m, matching standard box length).
 
-The retract uses `move_linear(allow_elbow_flip=True)` because the long retract path crosses the shoulder joint limit (±57°). At the limit boundary, the arm automatically flips elbow configuration (elbow_up → elbow_down) and continues. The TCP stays approximately in place during the flip, maintaining hook contact with the box.
+The retract uses `move_linear(allow_elbow_flip=True)` because the long retract path crosses the shoulder joint limit (±57°). At the limit boundary, the arm automatically flips elbow configuration (elbow_up → elbow_down) and continues. Before the flip, Z is raised by `z_above_box_m` (0.10m) to clear the box, and lowered back after the flip. This prevents the hook from colliding with the box during the elbow reconfiguration.
 
 The `move_linear` method interpolates Cartesian waypoints (every `linear_step_size` meters) and computes IK for each, then sends a multi-point trajectory to the controller.
 
@@ -101,8 +102,10 @@ The `move_linear` method interpolates Cartesian waypoints (every `linear_step_si
 **Design decisions:**
 - `move_to_point` for approach (joint-space, safer for entry into cabinet)
 - `move_linear` with `allow_elbow_flip=True` for retraction (straight-line ensures box clears cabinet walls; elbow flip handles shoulder limit crossing)
+- Flip callbacks raise/lower Z around elbow flip — prevents hook collision with box during reconfiguration
 - Rotate wrist before raise Z — hook oriented first while arm is at home (safe)
 - X offset on approach — keeps approach angle within shoulder joint limits
+- Home uses `move_joints` + `move_z` instead of `move_home()` — `move_home()` lowers Z first, which would drag the hook through the extracted box
 
 **Step 3 — Verify & Complete (90-100%)**
 - Read box extraction sensor → `box_extracted` (mock: always `True` for now)
@@ -219,6 +222,7 @@ extract_box_server:
     hook_grasp:
       wrist_angle_rad: 1.5708       # ±π/2 — hook orientation (sign auto from side)
       z_offset_m: 0.03              # Raise/lower distance to clear handle plate
+      z_above_box_m: 0.10            # Raise distance to clear entire box (overhook disengage)
       approach_depth_m: 0.20        # How far arm reaches into cabinet (Y axis)
       approach_x_offset_m: 0.20     # X offset for approach — keeps arm within shoulder limits
       y_inside_m: 0.02              # Extra depth inside box edge
@@ -246,6 +250,7 @@ extract_box_server:
 |-----------|------|---------|-------------|
 | `hook_grasp.wrist_angle_rad` | float | `1.5708` | Hook orientation angle (sign auto from side) |
 | `hook_grasp.z_offset_m` | float | `0.03` | Raise/lower distance to clear handle plate [m] |
+| `hook_grasp.z_above_box_m` | float | `0.10` | Raise distance to clear entire box for overhook disengage [m] |
 | `hook_grasp.approach_depth_m` | float | `0.20` | How far arm reaches into cabinet [m] |
 | `hook_grasp.approach_x_offset_m` | float | `0.20` | X offset to keep approach within shoulder limits [m] |
 | `hook_grasp.y_inside_m` | float | `0.02` | Extra depth inside box edge [m] |

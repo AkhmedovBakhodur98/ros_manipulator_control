@@ -294,6 +294,8 @@ async def move_linear(
     velocity: float = 0.1,       # m/s (Cartesian)
     step_size: float = 0.005,    # m interpolation step
     allow_elbow_flip: bool = False,
+    on_before_flip: Callable = None,  # callback before elbow flip
+    on_after_flip: Callable = None,   # callback after elbow flip
 ) -> ScaraResult
 ```
 
@@ -305,7 +307,7 @@ Straight-line TCP motion in Cartesian space. Generates multi-point trajectory vi
 3. Interpolate straight line from current to target with `step_size` spacing
 4. For each waypoint: compute IK with consistent elbow config
 5. **Verify linearity:** FK each IK result, check deviation from ideal line. Fail if > `max_deviation` (default 5mm)
-6. If waypoint unreachable and `allow_elbow_flip=True`: delegate to `move_linear_with_flip()`
+6. If waypoint unreachable and `allow_elbow_flip=True`: delegate to `move_linear_with_flip()` with `on_before_flip` / `on_after_flip` callbacks forwarded
 7. Build multi-point `FollowJointTrajectory` with `time_from_start = step_size / velocity * index`
 8. Send to SCARA controller
 

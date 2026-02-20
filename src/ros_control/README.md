@@ -162,3 +162,4 @@ Full documentation: [docs/ros_control/](../../docs/ros_control/)
 - [place_container_server.md](../../docs/ros_control/place_container_server.md) — Container place operations
 - [pick_items_from_warehouse_action.md](../../docs/ros_control/pick_items_from_warehouse_action.md) — Medicine picking design
 - [pick_items_from_warehouse_server.md](../../docs/ros_control/pick_items_from_warehouse_server.md) — Medicine picking server
+
