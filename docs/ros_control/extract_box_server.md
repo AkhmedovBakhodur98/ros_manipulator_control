@@ -479,6 +479,7 @@ The server loads configuration from `extract_box_config.yaml` with deep-merge ag
 
 ## See Also
 
+- [return_box_server.md](return_box_server.md) — Box return (reverse of ExtractBox)
 - [navigate_to_address_server.md](navigate_to_address_server.md) — Platform navigation (used by ExtractBox)
 - [move_joint_group_server.md](move_joint_group_server.md) — Joint movement action server
 - [package_structure.md](package_structure.md) — Full package documentation

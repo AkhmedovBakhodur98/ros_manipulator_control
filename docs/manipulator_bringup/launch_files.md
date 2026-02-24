@@ -19,6 +19,7 @@ The main launch file that starts all infrastructure:
 - Container pick orchestration (`get_container_server`)
 - Container place orchestration (`place_container_server`)
 - Address-based navigation (`navigate_to_address_server`)
+- Box return orchestration (`return_box_server`, SCARA-gated)
 - Optional RViz2 visualization
 
 **Most Common Usage:** Launch with `use_scara:=true` to enable the full system including the SCARA arm. This is the recommended configuration for typical operations.
@@ -137,6 +138,7 @@ ros2 launch manipulator_bringup manipulator_bringup.launch.py rviz:=false
 13. Start SCARA application nodes (after scara_controller, if use_scara)
     ├─► scara_lock_server (distributed SCARA lock)
     ├─► extract_box_server (box extraction orchestrator)
+    ├─► return_box_server (box return orchestrator)
     └─► pick_items_from_warehouse_server (medicine picking orchestrator)
 
 14. Start RViz2 (if rviz:=true)
@@ -902,6 +904,7 @@ joint_state_broadcaster exits
   └── scara_controller (if use_scara)
         ├── scara_lock_server (if use_scara)
         ├── extract_box_server (if use_scara)
+        ├── return_box_server (if use_scara)
         └── pick_items_from_warehouse_server (if use_scara)
 ```
 
@@ -918,6 +921,7 @@ This ensures:
 - `navigate_to_address_server` starts only after `manipulator_controller` is spawned, ensuring `move_joint_group_server` is available
 - `scara_lock_server` starts only after `scara_controller` is spawned, providing the SCARA mutual exclusion lock
 - `extract_box_server` starts only after `scara_controller` is spawned, ensuring SCARA control is ready
+- `return_box_server` starts only after `scara_controller` is spawned, ensuring SCARA control is ready
 - `pick_items_from_warehouse_server` starts only after `scara_controller` is spawned, ensuring SCARA and lock server are ready
 
 ---
@@ -1029,4 +1033,5 @@ This ensures:
 - **GetContainer Server**: `../ros_control/get_container_server.md`
 - **PlaceContainer Server**: `../ros_control/place_container_server.md`
 - **NavigateToAddress Server**: `../ros_control/navigate_to_address_server.md`
+- **ReturnBox Server**: `../ros_control/return_box_server.md`
 

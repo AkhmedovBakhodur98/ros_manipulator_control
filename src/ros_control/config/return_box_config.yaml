@@ -1,0 +1,29 @@
+return_box_server:
+  ros__parameters:
+    # Hook grasp parameters
+    hook_grasp:
+      wrist_angle_rad: 1.5708       # ±π/2 — hook orientation (sign auto from side)
+      z_offset_m: 0.03              # Raise to disengage hook above handle plate
+      z_above_box_m: 0.10           # Raise to clear entire box
+      approach_depth_m: 0.20        # Depth into cabinet (Y axis)
+      approach_x_offset_m: 0.20     # X offset (same as extract)
+      y_inside_m: 0.02              # Extra depth inside box edge
+      retract_overshoot_m: 0.38     # Push start position (where extract ended)
+      z_lower_velocity: 0.05        # Z velocity (m/s)
+
+    # Motion parameters
+    motion:
+      push_velocity: 0.05           # Linear push velocity (m/s) — slow for safety
+      position_velocity: 0.5        # Joint-space positioning velocity
+      linear_step_size: 0.005       # Cartesian step size (m)
+      return_home: true             # Arm returns to home after return
+
+    # Timeouts
+    timeouts:
+      navigate_timeout: 60.0        # NavigateToAddress timeout (seconds)
+      return_timeout: 30.0          # SCARA return timeout (seconds)
+
+    # Sensor (mock)
+    sensor:
+      mock: true                    # Use mock sensor (always returns true)
+      # topic: "/box_sensor"        # Real sensor topic (for future)

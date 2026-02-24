@@ -8,7 +8,7 @@ ROS2 control system for an industrial manipulator with optional SCARA arm. Provi
 |---------|-------------|
 | `manipulator_description` | Robot model (URDF/xacro), meshes, controllers config |
 | `scara_description` | Optional SCARA arm module (3-DOF, attaches to picker_frame) |
-| `ros_control` | Unified control interface: joint movement, gripper, container operations, medicine picking |
+| `ros_control` | Unified control interface: joint movement, gripper, container operations, box extraction/return, medicine picking |
 | `scara_control` | SCARA arm control library (ScaraClient: IK/FK, linear motion, pick/place) |
 | `rest_api_bridge` | REST API layer for external WMS integration (FastAPI + JWT auth) |
 | `manipulator_bringup` | Launch files for full system startup |
@@ -56,6 +56,10 @@ ros2 action send_goal /navigate_to_address ros_control/action/NavigateToAddress 
 # Extract box from shelf
 ros2 action send_goal /extract_box ros_control/action/ExtractBox \
   "{box: {side: 'left', cabinet_num: 2, row: 1, column: 0}}" --feedback
+
+# Return box to shelf
+ros2 action send_goal /return_box ros_control/action/ReturnBox \
+  "{box: {side: 'left', cabinet_num: 2, row: 1, column: 0}, box_id: 'box_l_2_1_0'}" --feedback
 
 # Pick medicines from box (orchestrator: extract box + pick + place into container)
 ros2 action send_goal /PickItems ros_control/action/PickItemsFromWarehouse \
@@ -122,7 +126,7 @@ src/
 │   └── launch/                    # display.launch.py, scara_control.launch.py
 │
 ├── ros_control/                   # Unified control interface
-│   ├── action/                    # MoveJointGroup, GetContainer, PlaceContainer, NavigateToAddress, ExtractBox, PickItemsFromWarehouse
+│   ├── action/                    # MoveJointGroup, GetContainer, PlaceContainer, NavigateToAddress, ExtractBox, ReturnBox, PickItemsFromWarehouse
 │   ├── msg/                       # Address, Medicament
 │   ├── config/                    # Server configurations
 │   └── src/                       # Server implementations
@@ -132,6 +136,7 @@ src/
 │       ├── place_container_server.py
 │       ├── navigate_to_address_server.py
 │       ├── extract_box_server.py
+│       ├── return_box_server.py
 │       └── pick_items_from_warehouse_server.py
 │
 ├── rest_api_bridge/               # REST API for external WMS
@@ -160,6 +165,7 @@ src/
 | `/place_container` | `ros_control/action/PlaceContainer` | Container place (move -> release -> retract) |
 | `/navigate_to_address` | `ros_control/action/NavigateToAddress` | Navigate platform to cabinet address (side, cabinet, row, column) |
 | `/extract_box` | `ros_control/action/ExtractBox` | Extract box from shelf (navigate + SCARA hook retract) |
+| `/return_box` | `ros_control/action/ReturnBox` | Return box to shelf (navigate + SCARA hook push) |
 | `/PickItems` | `ros_control/action/PickItemsFromWarehouse` | Orchestrator: extract box + pick medicines + place into container |
 
 ### Services
@@ -195,6 +201,7 @@ Full documentation is in the [docs/](docs/) directory:
 - [docs/ros_control/place_container_server.md](docs/ros_control/place_container_server.md) - Container place operations
 - [docs/ros_control/navigate_to_address_server.md](docs/ros_control/navigate_to_address_server.md) - Address-based platform navigation
 - [docs/ros_control/extract_box_server.md](docs/ros_control/extract_box_server.md) - Box extraction from shelf
+- [docs/ros_control/return_box_server.md](docs/ros_control/return_box_server.md) - Box return to shelf
 - [docs/ros_control/pick_items_from_warehouse_action.md](docs/ros_control/pick_items_from_warehouse_action.md) - Medicine picking orchestrator design
 - [docs/ros_control/pick_items_from_warehouse_server.md](docs/ros_control/pick_items_from_warehouse_server.md) - Medicine picking server implementation
 - [docs/rest_api_bridge/package_structure.md](docs/rest_api_bridge/package_structure.md) - REST API complete reference

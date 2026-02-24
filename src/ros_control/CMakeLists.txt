@@ -24,6 +24,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "action/PlaceContainer.action"
   "action/NavigateToAddress.action"
   "action/ExtractBox.action"
+  "action/ReturnBox.action"
   "action/PickItemsFromWarehouse.action"
   DEPENDENCIES
     sensor_msgs
@@ -42,6 +43,7 @@ install(PROGRAMS
   src/place_container_server.py
   src/navigate_to_address_server.py
   src/extract_box_server.py
+  src/return_box_server.py
   src/pick_items_from_warehouse_server.py
   DESTINATION lib/${PROJECT_NAME}
 )

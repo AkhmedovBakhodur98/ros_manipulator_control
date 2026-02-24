@@ -33,6 +33,7 @@ docs/
 │   ├── get_container_server.md            # GetContainer server documentation
 │   ├── place_container_action.md          # PlaceContainer architectural design
 │   ├── place_container_server.md          # PlaceContainer server documentation
+│   ├── return_box_server.md               # ReturnBox server documentation
 │   ├── pick_items_from_warehouse_action.md # PickItemsFromWarehouse architectural design
 │   └── pick_items_from_warehouse_server.md # PickItemsFromWarehouse server documentation
 ├── rest_api_bridge/                       # REST API bridge documentation
@@ -72,6 +73,7 @@ docs/
 - [ros_control/gripper_service.md](ros_control/gripper_service.md) - Gripper open/close control
 - [ros_control/get_container_server.md](ros_control/get_container_server.md) - Container pick operations
 - [ros_control/place_container_server.md](ros_control/place_container_server.md) - Container place operations
+- [ros_control/return_box_server.md](ros_control/return_box_server.md) - Box return to cabinet
 - [ros_control/pick_items_from_warehouse_server.md](ros_control/pick_items_from_warehouse_server.md) - Medicine picking orchestrator
 - [ros_control/pick_items_from_warehouse_action.md](ros_control/pick_items_from_warehouse_action.md) - PickItems architectural design
 - [scara_description/ros2_control.md](scara_description/ros2_control.md) - SCARA ros2_control integration
@@ -341,6 +343,22 @@ docs/
 
 ---
 
+### [return_box_server.md](ros_control/return_box_server.md)
+**Purpose:** Documentation for the ReturnBox action server — returning a box to a cabinet cell (reverse of ExtractBox).
+
+**Contents:**
+- Execution flow (navigate -> position -> push -> disengage -> home)
+- 7-step SCARA return sequence (reverse of extraction)
+- Comparison table: ExtractBox vs ReturnBox differences
+- Action definition and feedback phases
+- Configuration parameters
+- Usage examples (CLI, Python)
+- Implementation details
+
+**When to read:** When you need to return boxes to cabinet cells after extraction.
+
+---
+
 ### [pick_items_from_warehouse_action.md](ros_control/pick_items_from_warehouse_action.md)
 **Purpose:** Architectural design document for the PickItemsFromWarehouse action — medicine picking orchestrator.
 
@@ -540,6 +558,9 @@ docs/
 - Read [ros_control/get_container_server.md](ros_control/get_container_server.md)
 - Read [ros_control/place_container_server.md](ros_control/place_container_server.md)
 
+**...return a box to the shelf:**
+- Read [ros_control/return_box_server.md](ros_control/return_box_server.md)
+
 **...pick medicines from a shelf box:**
 - Read [ros_control/pick_items_from_warehouse_action.md](ros_control/pick_items_from_warehouse_action.md) for architectural design
 - Read [ros_control/pick_items_from_warehouse_server.md](ros_control/pick_items_from_warehouse_server.md) for implementation details
@@ -635,6 +656,7 @@ ros_control (unified control interface)
     ├── place_container_server               ── Container place orchestration
     ├── navigate_to_address_server           ── Address-based platform navigation
     ├── extract_box_server                   ── Box extraction (navigate + SCARA hook)
+    ├── return_box_server                    ── Box return (navigate + SCARA hook push)
     └── pick_items_from_warehouse_server     ── Orchestrator: extract box + pick + place
 
 manipulator_bringup (system startup)
@@ -695,6 +717,10 @@ ros2 action send_goal /get_container ros_control/action/GetContainer "{}" --feed
 # Place container
 ros2 action send_goal /place_container ros_control/action/PlaceContainer "{}" --feedback
 
+# Return box to shelf
+ros2 action send_goal /return_box ros_control/action/ReturnBox \
+  "{box: {side: 'left', cabinet_num: 2, row: 1, column: 0}, box_id: 'box_l_2_1_0'}" --feedback
+
 # Pick medicines from shelf (orchestrator)
 ros2 action send_goal /PickItems ros_control/action/PickItemsFromWarehouse \
   "{detection: [{image_id: 'med-001', row_id: 0, box_center: {x: 0.0, y: 0.0, z: 0.0}}], box: {side: 'left', cabinet_num: 2, row: 1, column: 0}}" --feedback
@@ -745,6 +771,7 @@ curl -X POST http://localhost:8080/api/v1/get_items \
 - `src/ros_control/config/get_container_config.yaml` - GetContainer server config
 - `src/ros_control/config/place_container_config.yaml` - PlaceContainer server config
 - `src/ros_control/config/extract_box_config.yaml` - ExtractBox server config
+- `src/ros_control/config/return_box_config.yaml` - ReturnBox server config
 - `src/ros_control/config/pick_items_from_warehouse_config.yaml` - PickItemsFromWarehouse server config
 - `src/rest_api_bridge/config/rest_api_config.yaml` - REST API server and authentication config
 

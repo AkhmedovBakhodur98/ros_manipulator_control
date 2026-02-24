@@ -17,6 +17,7 @@ src/ros_control/
 │   ├── PlaceContainer.action         # Container place action definition
 │   ├── NavigateToAddress.action      # Address-based navigation action definition
 │   ├── ExtractBox.action             # Box extraction action definition
+│   ├── ReturnBox.action              # Box return action definition
 │   └── PickItemsFromWarehouse.action # Medicine picking orchestrator action definition
 ├── msg/
 │   ├── Address.msg                   # Cabinet cell address message
@@ -28,6 +29,7 @@ src/ros_control/
 │   ├── place_container_config.yaml   # PlaceContainer server configuration
 │   ├── navigate_to_address_config.yaml  # NavigateToAddress server configuration
 │   ├── extract_box_config.yaml       # ExtractBox server configuration
+│   ├── return_box_config.yaml        # ReturnBox server configuration
 │   └── pick_items_from_warehouse_config.yaml # PickItemsFromWarehouse server configuration
 ├── launch/
 │   ├── move_joint_group_server.launch.py  # Launch file for MoveJointGroup action server
@@ -39,6 +41,7 @@ src/ros_control/
     ├── place_container_server.py     # Container place orchestration server
     ├── navigate_to_address_server.py # Address-based platform navigation server
     ├── extract_box_server.py         # Box extraction orchestration server
+    ├── return_box_server.py          # Box return orchestration server
     └── pick_items_from_warehouse_server.py # Medicine picking orchestrator server
 ```
 
@@ -52,8 +55,8 @@ src/ros_control/
 CMake build configuration for the ROS2 package.
 
 **Key sections:**
-- **Action/message generation**: Generates ROS2 interfaces from `MoveJointGroup.action`, `GetContainer.action`, `PlaceContainer.action`, `NavigateToAddress.action`, `ExtractBox.action`, `PickItemsFromWarehouse.action`, `Address.msg`, `Medicament.msg`
-- **Python script installation**: Installs `move_joint_group_server.py`, `gripper_service.py`, `get_container_server.py`, `place_container_server.py`, `navigate_to_address_server.py`, `extract_box_server.py`, `pick_items_from_warehouse_server.py` as executables
+- **Action/message generation**: Generates ROS2 interfaces from `MoveJointGroup.action`, `GetContainer.action`, `PlaceContainer.action`, `NavigateToAddress.action`, `ExtractBox.action`, `ReturnBox.action`, `PickItemsFromWarehouse.action`, `Address.msg`, `Medicament.msg`
+- **Python script installation**: Installs `move_joint_group_server.py`, `gripper_service.py`, `get_container_server.py`, `place_container_server.py`, `navigate_to_address_server.py`, `extract_box_server.py`, `return_box_server.py`, `pick_items_from_warehouse_server.py` as executables
 - **Resource installation**: Installs `config/` and `launch/` directories
 
 **Dependencies:**
@@ -243,6 +246,30 @@ string message            # Result message
 ```yaml
 string current_phase         # "navigating", "extracting", "done"
 float32 progress_percentage  # 0-100%
+```
+
+#### `action/ReturnBox.action`
+Defines the action interface for returning a box to a cabinet cell (reverse of ExtractBox).
+
+**Goal (Request):**
+```yaml
+ros_control/Address box       # Target cell address to return box to
+string box_id                 # ID of box being returned (e.g. "box_l_2_1_0")
+```
+
+**Result (Response):**
+```yaml
+bool success                  # True if box successfully returned
+bool box_extracted            # True if box released in storage (sensor)
+string returned_to_address    # Address format: "{side[0]}_{cabinet}_{row}_{col}"
+float64 execution_time        # Total execution time (seconds)
+string message                # Result message
+```
+
+**Feedback (Progress Updates):**
+```yaml
+string current_phase          # "navigating", "returning", "done"
+float32 progress_percentage   # 0-100%
 ```
 
 #### `action/PickItemsFromWarehouse.action`
@@ -437,6 +464,29 @@ Configuration file for the ExtractBox action server.
 | `motion.return_home` | bool | true | If true, arm returns to home after retract |
 | `timeouts.navigate_timeout` | float | 60.0 | NavigateToAddress timeout (seconds) |
 | `timeouts.extract_timeout` | float | 30.0 | SCARA extraction timeout (seconds) |
+| `sensor.mock` | bool | true | Use mock sensor (always returns true) |
+
+#### `config/return_box_config.yaml`
+Configuration file for the ReturnBox action server.
+
+**Configuration Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `hook_grasp.wrist_angle_rad` | float | 1.5708 | Hook orientation angle (sign auto from side) |
+| `hook_grasp.z_offset_m` | float | 0.03 | Raise distance to disengage hook above handle plate |
+| `hook_grasp.z_above_box_m` | float | 0.10 | Raise distance to clear entire box |
+| `hook_grasp.approach_depth_m` | float | 0.20 | Depth into cabinet (Y axis) |
+| `hook_grasp.approach_x_offset_m` | float | 0.20 | X offset — keeps approach within shoulder limits |
+| `hook_grasp.y_inside_m` | float | 0.02 | Extra depth inside box edge |
+| `hook_grasp.retract_overshoot_m` | float | 0.38 | Push start position (where extract ended) |
+| `hook_grasp.z_lower_velocity` | float | 0.05 | Z velocity (m/s) |
+| `motion.push_velocity` | float | 0.05 | Linear push velocity (m/s) |
+| `motion.position_velocity` | float | 0.5 | Joint-space positioning velocity |
+| `motion.linear_step_size` | float | 0.005 | Cartesian step size for linear push (m) |
+| `motion.return_home` | bool | true | Arm returns to home after return |
+| `timeouts.navigate_timeout` | float | 60.0 | NavigateToAddress timeout (seconds) |
+| `timeouts.return_timeout` | float | 30.0 | SCARA return timeout (seconds) |
 | `sensor.mock` | bool | true | Use mock sensor (always returns true) |
 
 #### `config/pick_items_from_warehouse_config.yaml`
@@ -667,6 +717,38 @@ High-level action server orchestrating box extraction from a cabinet cell.
 7. Return home (optional)
 8. Verify with box sensor
 
+#### `src/return_box_server.py`
+High-level action server orchestrating returning a box to a cabinet cell (reverse of ExtractBox).
+
+**Class: `ReturnBoxServer`**
+
+**Key Features:**
+- Coordinates NavigateToAddress and ScaraClient for full return sequence
+- 3-phase execution: navigate (0-40%), return with SCARA (40-90%), verify (90-100%)
+- Uses TF2 for picker_frame transform lookup
+- Supports cancellation at phase boundaries
+
+**Dependencies:**
+
+| Interface | Type | Purpose |
+|-----------|------|---------|
+| `/navigate_to_address` | Action | Navigate platform to target cell |
+| `ScaraClient` | Library | SCARA arm movement (wrist, Z, position, push, home) |
+| `picker_frame` TF | Transform | SCARA base position in world frame |
+
+**Execution Flow:**
+1. Navigate to cell (NavigateToAddress action)
+2. Rotate wrist for hook orientation
+3. Raise Z to clear entire box
+4. Position arm to push-start (behind box)
+5. Lower Z — hook engages handle plate
+6. Push — push box into cabinet linearly
+7. Raise Z — disengage hook
+8. Return home (optional)
+9. Verify with box sensor
+
+**See detailed documentation:** [return_box_server.md](return_box_server.md)
+
 #### `src/pick_items_from_warehouse_server.py`
 High-level orchestrator action server for the medicine picking workflow.
 
@@ -868,6 +950,7 @@ Launch file for starting the ExtractBox action server standalone.
 | `/place_container` | `ros_control/action/PlaceContainer` | `place_container_server` | Container place orchestration |
 | `/navigate_to_address` | `ros_control/action/NavigateToAddress` | `navigate_to_address_server` | Address-based platform navigation |
 | `/extract_box` | `ros_control/action/ExtractBox` | `extract_box_server` | Box extraction orchestration |
+| `/return_box` | `ros_control/action/ReturnBox` | `return_box_server` | Box return orchestration |
 | `/PickItems` | `ros_control/action/PickItemsFromWarehouse` | `pick_items_from_warehouse_server` | Medicine picking orchestrator |
 
 ### Action Clients
@@ -879,6 +962,7 @@ Launch file for starting the ExtractBox action server standalone.
 | `/move_joint_group` | `ros_control/action/MoveJointGroup` | `place_container_server` | Joint movement |
 | `/move_joint_group` | `ros_control/action/MoveJointGroup` | `navigate_to_address_server` | Platform movement |
 | `/navigate_to_address` | `ros_control/action/NavigateToAddress` | `extract_box_server` | Cell navigation |
+| `/navigate_to_address` | `ros_control/action/NavigateToAddress` | `return_box_server` | Cell navigation |
 | `/extract_box` | `ros_control/action/ExtractBox` | `pick_items_from_warehouse_server` | Box extraction sub-action |
 
 ---
@@ -1115,6 +1199,7 @@ discovery:
 - **Gripper Service**: [gripper_service.md](gripper_service.md)
 - **GetContainer Server**: [get_container_server.md](get_container_server.md)
 - **PlaceContainer Server**: [place_container_server.md](place_container_server.md)
+- **ReturnBox Server**: [return_box_server.md](return_box_server.md)
 - **PickItemsFromWarehouse Design**: [pick_items_from_warehouse_action.md](pick_items_from_warehouse_action.md)
 - **PickItemsFromWarehouse Server**: [pick_items_from_warehouse_server.md](pick_items_from_warehouse_server.md)
 - **Package README**: `src/ros_control/README.md`
