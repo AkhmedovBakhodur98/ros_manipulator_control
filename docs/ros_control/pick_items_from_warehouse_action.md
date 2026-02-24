@@ -2,7 +2,7 @@
 
 ## Overview
 
-The **PickItemsFromWarehouse** action server is the orchestrator for the medicine picking workflow. It extracts a box from the shelf (via `/extract_box` action), picks medicines from it using the SCARA arm, and places them into a shipping container. Vision data is provided through a pluggable provider interface — currently a mock implementation that returns configurable positions, designed to be replaced with real vision services (`/FindBox`, `/ContSide`) in the future.
+The **PickItemsFromWarehouse** action server is the orchestrator for the medicine picking workflow. It extracts a box from the shelf (via `/extract_box` action), picks medicines from it using the SCARA arm, places them into a shipping container, and returns the box to the shelf (via `/return_box` action). Vision data is provided through a pluggable provider interface — currently a mock implementation that returns configurable positions, designed to be replaced with real vision services (`/FindBox`, `/ContSide`) in the future.
 
 **Node:** `src/ros_control/src/pick_items_from_warehouse_server.py`
 **Action:** `/PickItems`
@@ -24,9 +24,11 @@ POST /getmedicine (REST API)
     │       ├── VisionProvider.find_box()       (locate medicine in box)
     │       ├── ScaraClient                     (pick medicine from box)
     │       ├── VisionProvider.container_side() (find drop spot in container)
-    │       └── ScaraClient                     (place medicine into container)
+    │       ├── ScaraClient                     (place medicine into container)
+    │       └── ReturnBox Action               (navigate + push box back)
+    │               ├── NavigateToAddress       (move platform to cell)
+    │               └── ScaraClient             (push box into shelf)
     │
-    ├── ReturnBox Action                 ← push box back into shelf
     └── PlaceContainer Action            ← return shipping container
 ```
 
@@ -201,6 +203,10 @@ Both `per_item_timeout` and `total_timeout` are enforced. Total timeout is check
 ### 10. Two-stage approach descent
 
 The approach uses `approach_offset_z` for an intermediate descent: safe_z → approach_z (grasp.z + offset) at approach velocity, then approach_z → pick_z (grasp.z - grasp_offset_z) at slower pick velocity. This gives controlled deceleration before contact.
+
+### 11. ReturnBox as sub-action of PickItemsFromWarehouse
+
+After picking completes, the orchestrator calls `/return_box` to push the box back into the shelf. This happens after the SCARA lock is released (Phase 3), so ReturnBox acquires its own SCARA lock internally — the same pattern as ExtractBox. ReturnBox failure is non-fatal: items were already picked successfully, so the result `success` is based solely on `items_picked == items_total`. The failure is noted in the result message (e.g., "Picked 3/3 items successfully, but box return failed: ..."). The feature is controlled by `behavior.return_box_after_pick` (default: `true`).
 
 ---
 

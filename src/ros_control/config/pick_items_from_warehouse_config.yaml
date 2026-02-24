@@ -30,6 +30,7 @@ pick_items_from_warehouse_server:
       continue_on_item_failure: true  # Continue to next item if one fails
       return_home_after_all: true     # Return SCARA home after all items
       max_detection_retries: 2        # Retry find_box on failure
+      return_box_after_pick: true     # Push box back into shelf after picking
 
     # Mock vision provider configuration
     mock:

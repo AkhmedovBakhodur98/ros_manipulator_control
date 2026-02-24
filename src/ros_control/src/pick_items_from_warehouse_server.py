@@ -7,9 +7,10 @@ picks medicines from it, and places them into a shipping container.
 
 Execution flow:
 1. Validate goal          (0-5%)
-2. Extract box            (5-40%)   → /extract_box action
-3. Per-item pick & place  (40-90%)
-4. Return home & finalize (90-100%)
+2. Extract box            (5-35%)   → /extract_box action
+3. Per-item pick & place  (35-75%)  → SCARA lock held, includes home return
+4. Return box             (75-95%)  → /return_box action (if enabled)
+5. Finalize               (95-100%)
 """
 
 import rclpy
@@ -26,7 +27,7 @@ from typing import Dict, Optional, Tuple, List
 
 from ament_index_python.packages import get_package_share_directory
 
-from ros_control.action import PickItemsFromWarehouse, ExtractBox
+from ros_control.action import PickItemsFromWarehouse, ExtractBox, ReturnBox
 from ros_control.msg import Medicament, Address
 from action_msgs.msg import GoalStatus
 
@@ -156,6 +157,16 @@ class PickItemsFromWarehouseServer(Node):
             callback_group=self.callback_group,
         )
         self._active_extract_goal_handle = None
+
+        # ReturnBox action client
+        self.return_box_client = ActionClient(
+            self,
+            ReturnBox,
+            'return_box',
+            callback_group=self.callback_group,
+        )
+        self._active_return_goal_handle = None
+
         self._executing = False
 
         # ScaraClient instance (attaches to this node, auto-loads config)
@@ -263,6 +274,7 @@ class PickItemsFromWarehouseServer(Node):
                 'continue_on_item_failure': True,
                 'return_home_after_all': True,
                 'max_detection_retries': 2,
+                'return_box_after_pick': True,
             },
             'mock': {
                 'enabled': True,
@@ -297,6 +309,9 @@ class PickItemsFromWarehouseServer(Node):
         if self._active_extract_goal_handle is not None:
             self.get_logger().info('Forwarding cancel to ExtractBox')
             self._active_extract_goal_handle.cancel_goal_async()
+        if self._active_return_goal_handle is not None:
+            self.get_logger().info('Forwarding cancel to ReturnBox')
+            self._active_return_goal_handle.cancel_goal_async()
         return CancelResponse.ACCEPT
 
     # ------------------------------------------------------------------
@@ -341,14 +356,14 @@ class PickItemsFromWarehouseServer(Node):
             feedback.message = 'Goal validated'
             goal_handle.publish_feedback(feedback)
 
-            # --- Phase 2: Extract box (5-40%) ---
+            # --- Phase 2: Extract box (5-35%) ---
             # ExtractBox acquires/releases its own lock internally.
             feedback.current_phase = 'extracting_box'
             feedback.progress_percentage = 5.0
             feedback.message = 'Extracting box from shelf'
             goal_handle.publish_feedback(feedback)
 
-            extract_success, extract_msg = await self._extract_box(
+            extract_success, extract_msg, box_id = await self._extract_box(
                 box, goal_handle, feedback
             )
 
@@ -367,7 +382,7 @@ class PickItemsFromWarehouseServer(Node):
 
             self.get_logger().info(f'Box extracted successfully: {extract_msg}')
 
-            # --- Phase 3: Per-item pick & place (40-90%) ---
+            # --- Phase 3: Per-item pick & place (35-75%) ---
             acquired = await self.scara.acquire()
             if not acquired:
                 return self._create_result(
@@ -398,7 +413,7 @@ class PickItemsFromWarehouseServer(Node):
 
                     feedback.current_phase = 'picking'
                     feedback.current_item_index = idx
-                    item_progress_start = 40.0 + (idx / total_items) * 50.0
+                    item_progress_start = 35.0 + (idx / total_items) * 40.0
                     feedback.progress_percentage = item_progress_start
                     feedback.message = f'Processing item {idx + 1}/{total_items}: {med.image_id}'
                     goal_handle.publish_feedback(feedback)
@@ -426,10 +441,10 @@ class PickItemsFromWarehouseServer(Node):
                                 f'Item {idx + 1} failed: {msg}'
                             )
 
-                # --- Phase 4: Finalize (90-100%) ---
-                feedback.current_phase = 'finalizing'
-                feedback.progress_percentage = 90.0
-                feedback.message = 'Returning home'
+                # Return SCARA home before releasing lock
+                feedback.current_phase = 'picking'
+                feedback.progress_percentage = 73.0
+                feedback.message = 'Returning SCARA home'
                 goal_handle.publish_feedback(feedback)
 
                 if self.config['behavior']['return_home_after_all']:
@@ -438,6 +453,34 @@ class PickItemsFromWarehouseServer(Node):
                         self.get_logger().warn(f'Home return failed: {result.message}')
             finally:
                 await self.scara.release()
+
+            # --- Phase 4: Return box (75-95%) ---
+            return_box_failure = ''
+            if self.config['behavior']['return_box_after_pick']:
+                feedback.current_phase = 'returning_box'
+                feedback.progress_percentage = 75.0
+                feedback.message = 'Returning box to shelf'
+                goal_handle.publish_feedback(feedback)
+
+                return_success, return_msg = await self._return_box(
+                    box, box_id, goal_handle, feedback
+                )
+
+                if goal_handle.is_cancel_requested:
+                    goal_handle.canceled()
+                    return self._create_canceled_result(
+                        medicine_qr, items_picked, total_items, start_time
+                    )
+
+                if not return_success:
+                    self.get_logger().warn(f'Box return failed: {return_msg}')
+                    return_box_failure = return_msg
+
+            # --- Phase 5: Finalize (95-100%) ---
+            feedback.current_phase = 'finalizing'
+            feedback.progress_percentage = 95.0
+            feedback.message = 'Finalizing'
+            goal_handle.publish_feedback(feedback)
 
             feedback.progress_percentage = 100.0
             feedback.message = 'Complete'
@@ -449,6 +492,8 @@ class PickItemsFromWarehouseServer(Node):
                 if all_picked
                 else f'Partial success: {items_picked}/{total_items} items picked'
             )
+            if return_box_failure:
+                message += f', but box return failed: {return_box_failure}'
 
             return self._create_result(
                 goal_handle, all_picked, medicine_qr,
@@ -473,11 +518,11 @@ class PickItemsFromWarehouseServer(Node):
         """Call ExtractBox action to extract the target box from the shelf.
 
         Returns:
-            (True, message) on success
-            (False, message) on failure
+            (True, message, box_id) on success
+            (False, message, '') on failure
         """
         if not self.extract_box_client.wait_for_server(timeout_sec=10.0):
-            return False, 'ExtractBox action server not available'
+            return False, 'ExtractBox action server not available', ''
 
         extract_goal = ExtractBox.Goal()
         extract_goal.box = box
@@ -488,9 +533,9 @@ class PickItemsFromWarehouseServer(Node):
         )
 
         def _relay_extract_feedback(fb_msg):
-            """Relay ExtractBox feedback mapped to 5-40% range."""
+            """Relay ExtractBox feedback mapped to 5-35% range."""
             extract_fb = fb_msg.feedback
-            mapped = 5.0 + extract_fb.progress_percentage * 0.35
+            mapped = 5.0 + extract_fb.progress_percentage * 0.30
             feedback.current_phase = 'extracting_box'
             feedback.progress_percentage = float(mapped)
             feedback.message = f'Extracting box: {extract_fb.current_phase}'
@@ -503,7 +548,7 @@ class PickItemsFromWarehouseServer(Node):
             )
 
             if not send_goal_future.accepted:
-                return False, 'ExtractBox goal rejected'
+                return False, 'ExtractBox goal rejected', ''
 
             self._active_extract_goal_handle = send_goal_future
 
@@ -512,18 +557,80 @@ class PickItemsFromWarehouseServer(Node):
             self._active_extract_goal_handle = None
 
             if result_future.status == GoalStatus.STATUS_CANCELED:
-                return False, 'ExtractBox was canceled'
+                return False, 'ExtractBox was canceled', ''
 
             extract_result = result_future.result
             if extract_result.success:
                 self.get_logger().info(f'Box extracted: {extract_result.box_id}')
-                return True, extract_result.message
+                return True, extract_result.message, extract_result.box_id
             else:
-                return False, extract_result.message
+                return False, extract_result.message, ''
 
         except Exception as e:
             self._active_extract_goal_handle = None
-            return False, f'ExtractBox error: {e}'
+            return False, f'ExtractBox error: {e}', ''
+
+    # ------------------------------------------------------------------
+    # Phase 4: Return box
+    # ------------------------------------------------------------------
+
+    async def _return_box(self, box, box_id, goal_handle, feedback):
+        """Call ReturnBox action to push the box back into the shelf.
+
+        Returns:
+            (True, message) on success
+            (False, message) on failure
+        """
+        if not self.return_box_client.wait_for_server(timeout_sec=10.0):
+            return False, 'ReturnBox action server not available'
+
+        return_goal = ReturnBox.Goal()
+        return_goal.box = box
+        return_goal.box_id = box_id
+
+        self.get_logger().info(
+            f'Sending ReturnBox goal: side={box.side}, '
+            f'cabinet={box.cabinet_num}, row={box.row}, column={box.column}, '
+            f'box_id={box_id}'
+        )
+
+        def _relay_return_feedback(fb_msg):
+            """Relay ReturnBox feedback mapped to 75-95% range."""
+            return_fb = fb_msg.feedback
+            mapped = 75.0 + return_fb.progress_percentage * 0.20
+            feedback.current_phase = 'returning_box'
+            feedback.progress_percentage = float(mapped)
+            feedback.message = f'Returning box: {return_fb.current_phase}'
+            goal_handle.publish_feedback(feedback)
+
+        try:
+            send_goal_future = await self.return_box_client.send_goal_async(
+                return_goal,
+                feedback_callback=_relay_return_feedback,
+            )
+
+            if not send_goal_future.accepted:
+                return False, 'ReturnBox goal rejected'
+
+            self._active_return_goal_handle = send_goal_future
+
+            result_future = await send_goal_future.get_result_async()
+
+            self._active_return_goal_handle = None
+
+            if result_future.status == GoalStatus.STATUS_CANCELED:
+                return False, 'ReturnBox was canceled'
+
+            return_result = result_future.result
+            if return_result.success:
+                self.get_logger().info(f'Box returned: {return_result.message}')
+                return True, return_result.message
+            else:
+                return False, return_result.message
+
+        except Exception as e:
+            self._active_return_goal_handle = None
+            return False, f'ReturnBox error: {e}'
 
     # ------------------------------------------------------------------
     # Phase 3: Per-item pick & place
@@ -547,9 +654,9 @@ class PickItemsFromWarehouseServer(Node):
         per_item_timeout = self.config['timeouts']['per_item_timeout']
         item_start_time = time.time()
 
-        # Progress range for this item within the 40-90% band
-        item_start = 40.0 + (index / total_items) * 50.0
-        item_end = 40.0 + ((index + 1) / total_items) * 50.0
+        # Progress range for this item within the 35-75% band
+        item_start = 35.0 + (index / total_items) * 40.0
+        item_end = 35.0 + ((index + 1) / total_items) * 40.0
         item_range = item_end - item_start
 
         def _item_progress(relative_pct: float) -> float:
