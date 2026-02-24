@@ -11,13 +11,14 @@ The `scara_control` package provides a reusable Python library for high-level SC
 ```
 src/scara_control/
 ├── package.xml                    # ament_python package manifest
-├── setup.py                       # Python package setup (library only, no entry_points)
+├── setup.py                       # Python package setup (library + scara_lock_server node)
 ├── setup.cfg                      # ament_python install paths
 ├── resource/
 │   └── scara_control              # ament resource index marker
 └── scara_control/
     ├── __init__.py                # Re-exports all public types
-    └── scara_client.py            # ScaraClient implementation
+    ├── scara_client.py            # ScaraClient implementation
+    └── scara_lock_server.py       # Distributed lock node for SCARA mutual exclusion
 ```
 
 ---
@@ -50,7 +51,15 @@ ROS2 package manifest for `ament_python` build type.
 | **Exec** | `pyyaml` | YAML configuration parsing |
 
 #### `setup.py`
-Standard ament_python setup. No `entry_points` — this is a library-only package with no executable nodes.
+Standard ament_python setup with `entry_points` for the `scara_lock_server` node:
+
+```python
+entry_points={
+    'console_scripts': [
+        'scara_lock_server = scara_control.scara_lock_server:main',
+    ],
+},
+```
 
 #### `setup.cfg`
 Standard ament_python install script paths.
@@ -88,6 +97,15 @@ Core implementation of the `ScaraClient` class.
 
 **See detailed documentation:** [scara_client.md](scara_client.md)
 
+#### `scara_control/scara_lock_server.py`
+Lightweight ROS2 node providing a distributed lock for SCARA mutual exclusion. Prevents concurrent access to the SCARA arm from multiple action servers (e.g. `ExtractBoxServer` and `PickItemsFromWarehouseServer`).
+
+**Services provided:**
+- `/scara_lock/acquire` (`std_srvs/srv/Trigger`) — returns `success=True` if lock granted, `success=False` if already held
+- `/scara_lock/release` (`std_srvs/srv/Trigger`) — releases the lock, returns `success=True`
+
+Simple boolean state (`_held`) with logging. Uses `ReentrantCallbackGroup` and `MultiThreadedExecutor`.
+
 ---
 
 ## Architecture
@@ -110,6 +128,11 @@ Any ROS2 Node
 │              │                              └─────────────────────────┘
 │              │    std_srvs/Trigger          ┌─────────────────────────┐
 │              ├──────────────────────────────► Tool Service (optional) │
+│              │                              └─────────────────────────┘
+│              │    std_srvs/Trigger          ┌─────────────────────────┐
+│              ├──────────────────────────────► ScaraLockServer         │
+│              │    (optional)                │ /scara_lock/acquire     │
+│              │                              │ /scara_lock/release     │
 └──────────────┘                              └─────────────────────────┘
 ```
 
@@ -223,6 +246,15 @@ scara_client:
 |---------|------|-------------|
 | `/scara_tool/activate` | `std_srvs/srv/Trigger` | Activate end-effector tool |
 | `/scara_tool/deactivate` | `std_srvs/srv/Trigger` | Deactivate end-effector tool |
+| `/scara_lock/acquire` | `std_srvs/srv/Trigger` | Acquire distributed SCARA lock (backward compatible — works without lock server) |
+| `/scara_lock/release` | `std_srvs/srv/Trigger` | Release distributed SCARA lock |
+
+### Services Provided (by `scara_lock_server`)
+
+| Service | Type | Description |
+|---------|------|-------------|
+| `/scara_lock/acquire` | `std_srvs/srv/Trigger` | Acquire the SCARA lock (`success=True` if granted) |
+| `/scara_lock/release` | `std_srvs/srv/Trigger` | Release the SCARA lock |
 
 ---
 
@@ -276,6 +308,34 @@ class MyNode(Node):
 
 ---
 
+## Distributed Lock (SCARA Mutual Exclusion)
+
+When multiple action servers (e.g. `ExtractBoxServer`, `PickItemsFromWarehouseServer`) share the same physical SCARA arm, concurrent access must be prevented. The `scara_lock_server` node provides a simple distributed lock:
+
+1. **Lock server** (`scara_lock_server`) holds a boolean `_held` state
+2. **ScaraClient** provides `acquire()` / `release()` methods that call the lock services
+3. **Action servers** call `acquire()` before SCARA work and `release()` in a `finally` block
+
+**Backward compatible:** If the lock server is not running, `acquire()` returns `True` with a warning — existing code works unchanged.
+
+**How it works end-to-end:**
+```
+PickItemsFromWarehouse:
+  Phase 2 → calls ExtractBox action
+               ExtractBox acquires lock ✓
+               ExtractBox does SCARA work
+               ExtractBox releases lock
+  Phase 3 → PickItems acquires lock ✓
+             PickItems does pick-and-place
+             PickItems releases lock
+
+Collision blocked: ExtractBox during PickItems Phase 3
+  PickItems holds lock
+  ExtractBox tries acquire → fails → returns "SCARA arm is busy"
+```
+
+---
+
 ## Building
 
 ```bash
@@ -288,6 +348,11 @@ source install/setup.bash
 ```bash
 ros2 pkg list | grep scara_control
 python3 -c "from scara_control import ScaraClient, ScaraResult, ElbowConfig"
+
+# Verify lock server node
+ros2 run scara_control scara_lock_server
+# In another terminal:
+ros2 service list | grep scara_lock
 ```
 
 ---

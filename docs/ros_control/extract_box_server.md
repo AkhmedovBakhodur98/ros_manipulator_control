@@ -169,6 +169,46 @@ Examples:
 
 ---
 
+## Concurrency Control
+
+### Single-Goal Policy
+
+The server rejects concurrent goals using an `_executing` flag:
+
+```python
+def _goal_callback(self, goal_request):
+    if self._executing:
+        return GoalResponse.REJECT   # "ExtractBox goal rejected — already executing"
+    return GoalResponse.ACCEPT
+```
+
+The flag is set to `True` at the start of `execute_callback` and reset in a `finally` block.
+
+### Distributed Lock (SCARA Mutual Exclusion)
+
+Before using the SCARA arm (Phase 2), the server acquires the distributed lock via `ScaraClient.acquire()`. This prevents conflicts when another server (e.g. `PickItemsFromWarehouseServer`) is using the SCARA arm concurrently:
+
+```
+execute_callback:
+    self._executing = True
+    try:
+        Phase 1: Navigate (no SCARA, no lock needed)
+
+        acquired = await self.scara.acquire()
+        if not acquired:
+            return error("SCARA arm is busy")
+        try:
+            Phase 2: Extract with SCARA
+        finally:
+            await self.scara.release()
+
+        Phase 3: Verify
+    finally:
+        self._executing = False
+```
+
+---
+
 ## Architecture
 
 ### Node Dependencies
@@ -191,7 +231,7 @@ Examples:
   ┌─────────────────┐ ┌─────────────────────────────┐
   │ MoveJointGroup  │ │ scara_controller            │
   │ (platform X, Z) │ │ + picker_z_controller       │
-  └─────────────────┘ │ (SCARA joints + Z axis)     │
+  └─────────────────┘ │ + scara_lock_server (lock)  │
                       └─────────────────────────────┘
 ```
 
@@ -204,6 +244,8 @@ Examples:
 | `/scara_controller/follow_joint_trajectory` | Action Client | Outgoing | Via ScaraClient (arm motion) |
 | `/picker_z_controller/follow_joint_trajectory` | Action Client | Outgoing | Via ScaraClient (Z axis) |
 | `/joint_states` | Subscription | Incoming | Via ScaraClient (arm state) |
+| `/scara_lock/acquire` | Service Client | Outgoing | Via ScaraClient (distributed lock) |
+| `/scara_lock/release` | Service Client | Outgoing | Via ScaraClient (distributed lock) |
 
 ### Threading Model
 
@@ -388,6 +430,8 @@ Requires `navigate_to_address_server` and `scara_controller` to be running.
 
 | Error | Phase | Result |
 |-------|-------|--------|
+| Concurrent goal while executing | goal callback | Goal rejected (GoalResponse.REJECT) |
+| SCARA lock not available (arm busy) | extracting | success=False, message="SCARA arm is busy" |
 | NavigateToAddress server not available | navigating | success=False, message="Navigation failed: ..." |
 | Navigation failed | navigating | success=False, message="Navigation failed: ..." |
 | SCARA motion failed (IK, joint limits) | extracting | success=False, message="Extraction failed: ..." |

@@ -141,6 +141,46 @@ message: "Partial success: 2/3 items picked"
 
 ---
 
+## Concurrency Control
+
+### Single-Goal Policy
+
+The server rejects concurrent goals using an `_executing` flag:
+
+```python
+def _goal_callback(self, goal_request):
+    if self._executing:
+        return GoalResponse.REJECT   # "PickItems goal rejected — already executing"
+    return GoalResponse.ACCEPT
+```
+
+The flag is set to `True` at the start of `execute_callback` and reset in a `finally` block.
+
+### Distributed Lock (SCARA Mutual Exclusion)
+
+The lock is acquired only around Phase 3 (pick & place) and Phase 4 (home return). Phase 2 (ExtractBox) manages its own lock internally:
+
+```
+execute_callback:
+    self._executing = True
+    try:
+        Phase 1: Validate
+        Phase 2: Extract box (ExtractBox acquires/releases its own lock)
+
+        acquired = await self.scara.acquire()
+        if not acquired:
+            return error("SCARA arm is busy")
+        try:
+            Phase 3: Per-item pick & place
+            Phase 4: Home return
+        finally:
+            await self.scara.release()
+    finally:
+        self._executing = False
+```
+
+---
+
 ## Architecture
 
 ### Node Dependencies
@@ -163,7 +203,7 @@ message: "Partial success: 2/3 items picked"
   ┌──────────────────┐ ┌──────────────────────┐ ┌─────────────────────┐
   │ extract_box_server│ │ scara_controller     │ │ MockVisionProvider   │
   │ (navigate+extract)│ │ + picker_z_controller│ │ (config-based poses) │
-  └──────────────────┘ │ (SCARA joints + Z)  │ └─────────────────────┘
+  └──────────────────┘ │ + scara_lock_server  │ └─────────────────────┘
                        └──────────────────────┘
 ```
 
@@ -178,6 +218,8 @@ message: "Partial success: 2/3 items picked"
 | `/scara_tool/activate` | Service Client | Outgoing | Via ScaraClient (tool on) — non-fatal if unavailable |
 | `/scara_tool/deactivate` | Service Client | Outgoing | Via ScaraClient (tool off) — non-fatal if unavailable |
 | `/joint_states` | Subscription | Incoming | Via ScaraClient (arm state) |
+| `/scara_lock/acquire` | Service Client | Outgoing | Via ScaraClient (distributed lock) |
+| `/scara_lock/release` | Service Client | Outgoing | Via ScaraClient (distributed lock) |
 
 ### Threading Model
 
@@ -403,6 +445,8 @@ Requires `scara_controller`, `picker_z_controller`, and `extract_box_server` to 
 
 | Error | Phase | Result |
 |-------|-------|--------|
+| Concurrent goal while executing | goal callback | Goal rejected (GoalResponse.REJECT) |
+| SCARA lock not available (arm busy) | picking | success=False, message="SCARA arm is busy" |
 | Empty detection list | initializing | success=False, message="No items in detection list" |
 | ExtractBox server not available | extracting_box | success=False, message="ExtractBox action server not available" |
 | ExtractBox goal rejected | extracting_box | success=False, message="ExtractBox goal rejected" |

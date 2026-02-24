@@ -458,6 +458,23 @@ def generate_launch_description():
         )
     )
 
+    # ScaraLockServer node (lightweight lock for SCARA mutual exclusion)
+    scara_lock_server_node = Node(
+        package='scara_control',
+        executable='scara_lock_server',
+        name='scara_lock_server',
+        output='screen',
+        condition=IfCondition(use_scara),
+    )
+
+    # Event handler: start scara_lock_server after scara_controller is spawned
+    delayed_scara_lock_server = RegisterEventHandler(
+        event_handler=OnProcessExit(
+            target_action=spawn_scara_controller,
+            on_exit=[scara_lock_server_node]
+        )
+    )
+
     # ExtractBox action server node (requires NavigateToAddress + ScaraClient)
     def create_extract_box_server(context):
         """Create extract_box_server node with config file parameters"""
@@ -566,6 +583,7 @@ def generate_launch_description():
         delayed_get_container_server,  # Starts after gripper_controller is spawned
         delayed_place_container_server,  # Starts after gripper_controller is spawned
         delayed_navigate_to_address_server,  # Starts after manipulator_controller is spawned
+        delayed_scara_lock_server,  # Starts after scara_controller is spawned (SCARA only)
         delayed_extract_box_server,  # Starts after scara_controller is spawned (SCARA only)
         delayed_pick_items_server,  # Starts after scara_controller is spawned (SCARA only)
         rviz_node

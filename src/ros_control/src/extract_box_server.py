@@ -63,6 +63,7 @@ class ExtractBoxServer(Node):
         # Track active navigation goal for cancellation
         self._active_nav_goal_handle = None
         self._current_phase = ''
+        self._executing = False
 
         # Action server
         self.action_server = ActionServer(
@@ -161,7 +162,10 @@ class ExtractBoxServer(Node):
     # ------------------------------------------------------------------
 
     def _goal_callback(self, goal_request):
-        """Accept all goals."""
+        """Accept goal only if not already executing (single-goal policy)."""
+        if self._executing:
+            self.get_logger().warn('ExtractBox goal rejected — already executing')
+            return GoalResponse.REJECT
         return GoalResponse.ACCEPT
 
     def _cancel_callback(self, goal_handle):
@@ -187,6 +191,7 @@ class ExtractBoxServer(Node):
 
         start_time = time.time()
         feedback = ExtractBox.Feedback()
+        self._executing = True
 
         try:
             # --- Phase 1: Navigate (0-40%) ---
@@ -212,25 +217,35 @@ class ExtractBoxServer(Node):
                 )
 
             # --- Phase 2: Extract with SCARA (40-90%) ---
-            self._current_phase = 'extracting'
-            feedback.current_phase = 'extracting'
-            feedback.progress_percentage = 40.0
-            goal_handle.publish_feedback(feedback)
-
-            extract_success, extract_msg = await self._extract_box(
-                box, nav_result, goal_handle, feedback
-            )
-
-            # Check for cancellation (may have been triggered during extraction)
-            if goal_handle.is_cancel_requested:
-                goal_handle.canceled()
-                return self._create_canceled_result(start_time)
-
-            if not extract_success:
+            acquired = await self.scara.acquire()
+            if not acquired:
                 return self._create_result(
                     goal_handle, False, False, '', start_time,
-                    f'Extraction failed: {extract_msg}'
+                    'SCARA arm is busy'
                 )
+
+            try:
+                self._current_phase = 'extracting'
+                feedback.current_phase = 'extracting'
+                feedback.progress_percentage = 40.0
+                goal_handle.publish_feedback(feedback)
+
+                extract_success, extract_msg = await self._extract_box(
+                    box, nav_result, goal_handle, feedback
+                )
+
+                # Check for cancellation (may have been triggered during extraction)
+                if goal_handle.is_cancel_requested:
+                    goal_handle.canceled()
+                    return self._create_canceled_result(start_time)
+
+                if not extract_success:
+                    return self._create_result(
+                        goal_handle, False, False, '', start_time,
+                        f'Extraction failed: {extract_msg}'
+                    )
+            finally:
+                await self.scara.release()
 
             # --- Phase 3: Verify & Complete (90-100%) ---
             self._current_phase = 'done'
@@ -264,6 +279,7 @@ class ExtractBoxServer(Node):
         finally:
             self._active_nav_goal_handle = None
             self._current_phase = ''
+            self._executing = False
 
     # ------------------------------------------------------------------
     # Phase 1: Navigation

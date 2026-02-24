@@ -188,6 +188,16 @@ class ScaraClient:
                 callback_group=self._cb_group,
             )
 
+        # ---- Lock service clients (optional, backward compatible) ----
+        self._lock_acquire_client = node.create_client(
+            Trigger, '/scara_lock/acquire',
+            callback_group=self._cb_group,
+        )
+        self._lock_release_client = node.create_client(
+            Trigger, '/scara_lock/release',
+            callback_group=self._cb_group,
+        )
+
         # ---- Elbow flip config ----
         flip_cfg = self._client_cfg.get('elbow_flip', {})
         self._flip_enabled = flip_cfg.get('enabled', False)
@@ -932,6 +942,52 @@ class ScaraClient:
         if not result.success:
             return result
         return await self.trigger_tool(activate=False)
+
+    # ------------------------------------------------------------------
+    # Distributed lock
+    # ------------------------------------------------------------------
+
+    async def acquire(self, timeout: float = 5.0) -> bool:
+        """Acquire the SCARA distributed lock.
+
+        Retries until *timeout* seconds elapse.  If the lock server is not
+        running the method returns ``True`` with a warning so that callers
+        that don't use the lock server keep working.
+        """
+        import asyncio
+
+        if not self._lock_acquire_client.wait_for_service(timeout_sec=2.0):
+            self._logger.warn(
+                'scara_lock/acquire service not available — proceeding without lock')
+            return True
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            resp = await self._lock_acquire_client.call_async(Trigger.Request())
+            if resp.success:
+                self._logger.info('SCARA lock acquired')
+                return True
+            # Lock held by someone else — wait and retry
+            await asyncio.sleep(0.25)
+
+        self._logger.warn('Failed to acquire SCARA lock within timeout')
+        return False
+
+    async def release(self) -> bool:
+        """Release the SCARA distributed lock.
+
+        Returns ``True`` if the lock was released or the lock server is not
+        running (backward compatible).
+        """
+        if not self._lock_release_client.wait_for_service(timeout_sec=2.0):
+            self._logger.warn(
+                'scara_lock/release service not available — skipping')
+            return True
+
+        resp = await self._lock_release_client.call_async(Trigger.Request())
+        if resp.success:
+            self._logger.info('SCARA lock released')
+        return resp.success
 
     # ------------------------------------------------------------------
     # Utility

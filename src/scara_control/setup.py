@@ -17,5 +17,9 @@ setup(
     maintainer_email='akhmedov@example.com',
     description='Reusable SCARA arm control library with IK, linear motion, and optional Z-axis support',
     license='MIT',
-    entry_points={},
+    entry_points={
+        'console_scripts': [
+            'scara_lock_server = scara_control.scara_lock_server:main',
+        ],
+    },
 )

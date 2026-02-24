@@ -394,6 +394,52 @@ High-level place: `move_to_point()` then `trigger_tool(activate=False)`.
 
 ---
 
+## Distributed Lock (Async)
+
+When multiple nodes share the same physical SCARA arm, use `acquire()` / `release()` for mutual exclusion. These call the `scara_lock_server` node's services.
+
+### acquire
+
+```python
+async def acquire(self, timeout: float = 5.0) -> bool
+```
+
+Attempt to acquire the distributed SCARA lock. Retries every 250ms until success or timeout.
+
+**Parameters:**
+- `timeout` — Maximum time to wait for the lock (seconds)
+
+**Returns:** `True` if lock acquired, `False` if timed out.
+
+**Backward compatible:** If the lock server is not running, returns `True` with a warning — existing code works unchanged.
+
+### release
+
+```python
+async def release(self) -> bool
+```
+
+Release the distributed SCARA lock.
+
+**Returns:** `True` if released successfully.
+
+**Backward compatible:** If the lock server is not running, returns `True` with a warning.
+
+### Usage Pattern
+
+```python
+acquired = await self.scara.acquire()
+if not acquired:
+    return error("SCARA arm is busy")
+try:
+    # SCARA work here
+    await self.scara.move_to_point(x=0.5, y=0.1)
+finally:
+    await self.scara.release()
+```
+
+---
+
 ## Error Handling
 
 Motion methods return `ScaraResult(success=False, message=...)` for recoverable errors. Exceptions are raised only for unrecoverable configuration issues.

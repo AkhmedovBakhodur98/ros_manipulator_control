@@ -134,7 +134,12 @@ ros2 launch manipulator_bringup manipulator_bringup.launch.py rviz:=false
     ├─► Waits for manipulator_controller to be spawned
     └─► Provides /navigate_to_address action for address-based navigation
 
-13. Start RViz2 (if rviz:=true)
+13. Start SCARA application nodes (after scara_controller, if use_scara)
+    ├─► scara_lock_server (distributed SCARA lock)
+    ├─► extract_box_server (box extraction orchestrator)
+    └─► pick_items_from_warehouse_server (medicine picking orchestrator)
+
+14. Start RViz2 (if rviz:=true)
     └─► Loads pre-configured RViz config
 ```
 
@@ -370,10 +375,10 @@ When multiple spawners trigger simultaneously on the same event (`joint_state_br
 
 ### 6. scara_controller (Conditional)
 
-**Package:** `controller_manager`  
-**Executable:** `spawner`  
-**Arguments:** `['scara_controller', '--controller-manager', '/controller_manager']`  
-**Condition:** `use_scara:=true`  
+**Package:** `controller_manager`
+**Executable:** `spawner`
+**Arguments:** `['scara_controller', '--controller-manager', '/controller_manager']`
+**Condition:** `use_scara:=true`
 **Purpose:** Trajectory control for SCARA arm
 
 **Spawned:** After `joint_state_broadcaster` (via event handler, only if use_scara)
@@ -387,6 +392,23 @@ When multiple spawners trigger simultaneously on the same event (`joint_state_br
 
 **Actions:**
 - `/scara_controller/follow_joint_trajectory` - Execute trajectory
+
+---
+
+### 6a. scara_lock_server (Conditional)
+
+**Package:** `scara_control`
+**Executable:** `scara_lock_server`
+**Condition:** `use_scara:=true`
+**Purpose:** Distributed lock for SCARA mutual exclusion — prevents concurrent access to the SCARA arm from multiple action servers
+
+**Spawned:** After `scara_controller` (via event handler)
+
+**Services:**
+- `/scara_lock/acquire` (`std_srvs/srv/Trigger`) — Acquire the SCARA lock
+- `/scara_lock/release` (`std_srvs/srv/Trigger`) — Release the SCARA lock
+
+**Why needed:** `ExtractBoxServer` and `PickItemsFromWarehouseServer` each create their own `ScaraClient` in separate processes. Without mutual exclusion, concurrent calls would send conflicting trajectories to the same physical controllers.
 
 ---
 
@@ -878,6 +900,9 @@ joint_state_broadcaster exits
   │     ├── get_container_server
   │     └── place_container_server
   └── scara_controller (if use_scara)
+        ├── scara_lock_server (if use_scara)
+        ├── extract_box_server (if use_scara)
+        └── pick_items_from_warehouse_server (if use_scara)
 ```
 
 **Why picker_z_controller is chained to manipulator_controller:**
@@ -891,6 +916,9 @@ This ensures:
 - `get_container_server` starts only after `gripper_controller` is spawned, ensuring both `gripper_service` and `move_joint_group_server` are available
 - `place_container_server` starts only after `gripper_controller` is spawned, ensuring both `gripper_service` and `move_joint_group_server` are available
 - `navigate_to_address_server` starts only after `manipulator_controller` is spawned, ensuring `move_joint_group_server` is available
+- `scara_lock_server` starts only after `scara_controller` is spawned, providing the SCARA mutual exclusion lock
+- `extract_box_server` starts only after `scara_controller` is spawned, ensuring SCARA control is ready
+- `pick_items_from_warehouse_server` starts only after `scara_controller` is spawned, ensuring SCARA and lock server are ready
 
 ---
 

@@ -663,6 +663,11 @@ Any ROS2 Node           ────────────────► │ 
                    ├── /scara_tool/activate
                    │   ─────────────────►  [Tool Service/Topic]
                    │
+                   ├── /scara_lock/acquire
+                   │   ─────────────────►  [ScaraLockServer]
+                   ├── /scara_lock/release    (optional, backward compatible)
+                   │   ─────────────────►  [ScaraLockServer]
+                   │
                    │   scara_params.yaml
                    └── (L1, L2, limits, z_axis, tool config)
 ```
@@ -691,7 +696,8 @@ src/scara_control/
 │   └── scara_control              # ament resource marker
 └── scara_control/
     ├── __init__.py
-    └── scara_client.py            # ScaraClient class
+    ├── scara_client.py            # ScaraClient class
+    └── scara_lock_server.py       # Distributed lock node for SCARA mutual exclusion
 ```
 
 **package.xml dependencies:**
@@ -864,7 +870,94 @@ class MyNode(Node):
 
 ---
 
-## 10. Open Questions
+## 10. Distributed Lock (SCARA Mutual Exclusion)
+
+When multiple independent action servers (e.g. `ExtractBoxServer`, `PickItemsFromWarehouseServer`) each create their own `ScaraClient` instance in separate processes, they share the same physical controllers (`/scara_controller`, `/picker_z_controller`). Without mutual exclusion, concurrent calls cause conflicting trajectories that can damage the arm.
+
+### Lock Architecture
+
+```
+ScaraLockServer (standalone ROS2 node)
+┌───────────────────────────────────┐
+│  _held: bool = False              │
+│                                   │
+│  /scara_lock/acquire  → Trigger   │
+│  /scara_lock/release  → Trigger   │
+└───────────────────────────────────┘
+         ▲              ▲
+         │              │
+    ScaraClient    ScaraClient
+    (ExtractBox)   (PickItems)
+```
+
+### ScaraClient Integration
+
+`ScaraClient` creates two additional service clients on construction:
+
+- `_lock_acquire_client` → `/scara_lock/acquire`
+- `_lock_release_client` → `/scara_lock/release`
+
+Two async methods are exposed:
+
+```python
+async def acquire(self, timeout: float = 5.0) -> bool:
+    """Retry loop: call /scara_lock/acquire every 250ms until success or timeout."""
+
+async def release(self) -> bool:
+    """Call /scara_lock/release."""
+```
+
+**Backward compatible:** If the lock server is not running, `acquire()` returns `True` with a warning.
+
+### Collision Scenarios
+
+| # | Scenario | Prevention |
+|---|----------|------------|
+| 1 | Two concurrent `/extract_box` goals | Single-goal policy (`_executing` flag → `GoalResponse.REJECT`) |
+| 2 | Two concurrent `/PickItems` goals | Single-goal policy (`_executing` flag → `GoalResponse.REJECT`) |
+| 3 | Direct `/extract_box` during PickItems Phase 2 | ExtractBox single-goal rejects (it's already executing for PickItems) |
+| 4 | Direct `/extract_box` during PickItems Phase 3 (picking) | Distributed lock — PickItems holds lock, ExtractBox `acquire()` fails |
+
+### Lock Protocol in Action Servers
+
+**ExtractBoxServer:**
+```
+execute_callback:
+    self._executing = True
+    try:
+        Phase 1: Navigate (no SCARA, no lock needed)
+        acquired = await self.scara.acquire()
+        if not acquired: return error("SCARA arm is busy")
+        try:
+            Phase 2: Extract with SCARA
+        finally:
+            await self.scara.release()
+        Phase 3: Verify
+    finally:
+        self._executing = False
+```
+
+**PickItemsFromWarehouseServer:**
+```
+execute_callback:
+    self._executing = True
+    try:
+        Phase 1: Validate
+        Phase 2: Extract box (ExtractBox manages its own lock)
+        acquired = await self.scara.acquire()
+        if not acquired: return error("SCARA arm is busy")
+        try:
+            Phase 3: Per-item pick & place
+            Phase 4: Home return
+        finally:
+            await self.scara.release()
+    finally:
+        self._executing = False
+```
+
+---
+
+## 11. Open Questions
 
 1. **Collision avoidance** — Should `ScaraClient` check for self-collision (elbow folding into base)? Or leave that to the caller?
 2. **Namespace support** — Should joint names and topic names support prefixing for multi-SCARA setups? (e.g., `/scara_left/scara_controller/...`)

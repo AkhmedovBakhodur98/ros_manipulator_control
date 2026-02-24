@@ -156,6 +156,7 @@ class PickItemsFromWarehouseServer(Node):
             callback_group=self.callback_group,
         )
         self._active_extract_goal_handle = None
+        self._executing = False
 
         # ScaraClient instance (attaches to this node, auto-loads config)
         self.scara = ScaraClient(self)
@@ -284,7 +285,10 @@ class PickItemsFromWarehouseServer(Node):
     # ------------------------------------------------------------------
 
     def _goal_callback(self, goal_request):
-        """Accept all goals."""
+        """Accept goal only if not already executing (single-goal policy)."""
+        if self._executing:
+            self.get_logger().warn('PickItems goal rejected — already executing')
+            return GoalResponse.REJECT
         return GoalResponse.ACCEPT
 
     def _cancel_callback(self, goal_handle):
@@ -316,6 +320,7 @@ class PickItemsFromWarehouseServer(Node):
         feedback = PickItemsFromWarehouse.Feedback()
         medicine_qr: List[str] = []
         items_picked = 0
+        self._executing = True
 
         try:
             # --- Phase 1: Validate (0-5%) ---
@@ -337,6 +342,7 @@ class PickItemsFromWarehouseServer(Node):
             goal_handle.publish_feedback(feedback)
 
             # --- Phase 2: Extract box (5-40%) ---
+            # ExtractBox acquires/releases its own lock internally.
             feedback.current_phase = 'extracting_box'
             feedback.progress_percentage = 5.0
             feedback.message = 'Extracting box from shelf'
@@ -362,65 +368,76 @@ class PickItemsFromWarehouseServer(Node):
             self.get_logger().info(f'Box extracted successfully: {extract_msg}')
 
             # --- Phase 3: Per-item pick & place (40-90%) ---
-            cfg_timeouts = self.config['timeouts']
-
-            for idx, med in enumerate(detection):
-                # Check total timeout
-                if (time.time() - start_time) > cfg_timeouts['total_timeout']:
-                    return self._create_result(
-                        goal_handle, False, medicine_qr,
-                        items_picked, total_items, start_time,
-                        f'Total timeout ({cfg_timeouts["total_timeout"]:.0f}s) exceeded '
-                        f'after {items_picked}/{total_items} items'
-                    )
-
-                # Check cancellation
-                if goal_handle.is_cancel_requested:
-                    goal_handle.canceled()
-                    return self._create_canceled_result(
-                        medicine_qr, items_picked, total_items, start_time
-                    )
-
-                feedback.current_phase = 'picking'
-                feedback.current_item_index = idx
-                item_progress_start = 40.0 + (idx / total_items) * 50.0
-                feedback.progress_percentage = item_progress_start
-                feedback.message = f'Processing item {idx + 1}/{total_items}: {med.image_id}'
-                goal_handle.publish_feedback(feedback)
-
-                self.get_logger().info(
-                    f'Item {idx + 1}/{total_items}: image_id={med.image_id}, '
-                    f'row_id={med.row_id}, center=({med.box_center.x:.3f}, '
-                    f'{med.box_center.y:.3f}, {med.box_center.z:.3f})'
+            acquired = await self.scara.acquire()
+            if not acquired:
+                return self._create_result(
+                    goal_handle, False, medicine_qr,
+                    items_picked, total_items, start_time,
+                    'SCARA arm is busy'
                 )
 
-                success, msg = await self._pick_and_place_item(
-                    idx, med, box, goal_handle, feedback, total_items
-                )
+            try:
+                cfg_timeouts = self.config['timeouts']
 
-                if success:
-                    items_picked += 1
-                    medicine_qr.append(med.image_id)
-                    self.get_logger().info(f'Item {idx + 1} picked successfully')
-                else:
-                    self.get_logger().warn(f'Item {idx + 1} failed: {msg}')
-                    if not self.config['behavior']['continue_on_item_failure']:
+                for idx, med in enumerate(detection):
+                    # Check total timeout
+                    if (time.time() - start_time) > cfg_timeouts['total_timeout']:
                         return self._create_result(
                             goal_handle, False, medicine_qr,
                             items_picked, total_items, start_time,
-                            f'Item {idx + 1} failed: {msg}'
+                            f'Total timeout ({cfg_timeouts["total_timeout"]:.0f}s) exceeded '
+                            f'after {items_picked}/{total_items} items'
                         )
 
-            # --- Phase 3: Finalize (90-100%) ---
-            feedback.current_phase = 'finalizing'
-            feedback.progress_percentage = 90.0
-            feedback.message = 'Returning home'
-            goal_handle.publish_feedback(feedback)
+                    # Check cancellation
+                    if goal_handle.is_cancel_requested:
+                        goal_handle.canceled()
+                        return self._create_canceled_result(
+                            medicine_qr, items_picked, total_items, start_time
+                        )
 
-            if self.config['behavior']['return_home_after_all']:
-                result = await self.scara.move_home()
-                if not result.success:
-                    self.get_logger().warn(f'Home return failed: {result.message}')
+                    feedback.current_phase = 'picking'
+                    feedback.current_item_index = idx
+                    item_progress_start = 40.0 + (idx / total_items) * 50.0
+                    feedback.progress_percentage = item_progress_start
+                    feedback.message = f'Processing item {idx + 1}/{total_items}: {med.image_id}'
+                    goal_handle.publish_feedback(feedback)
+
+                    self.get_logger().info(
+                        f'Item {idx + 1}/{total_items}: image_id={med.image_id}, '
+                        f'row_id={med.row_id}, center=({med.box_center.x:.3f}, '
+                        f'{med.box_center.y:.3f}, {med.box_center.z:.3f})'
+                    )
+
+                    success, msg = await self._pick_and_place_item(
+                        idx, med, box, goal_handle, feedback, total_items
+                    )
+
+                    if success:
+                        items_picked += 1
+                        medicine_qr.append(med.image_id)
+                        self.get_logger().info(f'Item {idx + 1} picked successfully')
+                    else:
+                        self.get_logger().warn(f'Item {idx + 1} failed: {msg}')
+                        if not self.config['behavior']['continue_on_item_failure']:
+                            return self._create_result(
+                                goal_handle, False, medicine_qr,
+                                items_picked, total_items, start_time,
+                                f'Item {idx + 1} failed: {msg}'
+                            )
+
+                # --- Phase 4: Finalize (90-100%) ---
+                feedback.current_phase = 'finalizing'
+                feedback.progress_percentage = 90.0
+                feedback.message = 'Returning home'
+                goal_handle.publish_feedback(feedback)
+
+                if self.config['behavior']['return_home_after_all']:
+                    result = await self.scara.move_home()
+                    if not result.success:
+                        self.get_logger().warn(f'Home return failed: {result.message}')
+            finally:
+                await self.scara.release()
 
             feedback.progress_percentage = 100.0
             feedback.message = 'Complete'
@@ -445,6 +462,8 @@ class PickItemsFromWarehouseServer(Node):
                 items_picked, total_items, start_time,
                 f'Execution error: {e}'
             )
+        finally:
+            self._executing = False
 
     # ------------------------------------------------------------------
     # Phase 2: Box extraction
