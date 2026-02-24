@@ -90,7 +90,7 @@ File: `ros_control/msg/Medicament.msg`
 ```
 string image_id                       # Unique image identifier for the medicine
 uint8 row_id                          # Row number within the box (0-based)
-geometry_msgs/Point box_center        # Approximate center in world coordinates (meters)
+geometry_msgs/Point box_center        # Approximate center in SCARA base frame (meters)
 ```
 
 ### PickItemsFromWarehouse.action

@@ -46,9 +46,9 @@ class MedicamentProfile:
 
 @dataclass
 class GraspPose:
-    x: float         # Grasp X in world frame (meters)
-    y: float         # Grasp Y in world frame (meters)
-    z: float         # Grasp Z in world frame (meters)
+    x: float         # Grasp X in SCARA base frame (meters)
+    y: float         # Grasp Y in SCARA base frame (meters)
+    z: float         # Grasp Z — picker_z axis position (meters)
     yaw: float       # Yaw rotation (radians)
 
 
@@ -66,9 +66,9 @@ class BoxDetection:
 
 @dataclass
 class ContainerDropPoint:
-    x: float         # Drop X in world frame (meters)
-    y: float         # Drop Y in world frame (meters)
-    z: float         # Drop Z in world frame (meters)
+    x: float         # Drop X in SCARA base frame (meters)
+    y: float         # Drop Y in SCARA base frame (meters)
+    z: float         # Drop Z — picker_z axis position (meters)
 
 
 # ------------------------------------------------------------------
