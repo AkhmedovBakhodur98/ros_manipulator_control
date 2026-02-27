@@ -2,7 +2,7 @@
 <!-- AR4 Robot Arm Macro
      Defines the 6-DOF AR4 robotic arm with all links and joints.
 
-     Joint Configuration (from AR4 MK1 reference):
+     Joint Configuration (from AR4 MK3 reference):
      J1: revolute, -170 to 170 deg, 60 deg/s
      J2: revolute, -42 to 90 deg, 60 deg/s
      J3: revolute, -89 to 52 deg, 60 deg/s
@@ -12,7 +12,7 @@
 -->
 <robot xmlns:xacro="http://wiki.ros.org/xacro">
 
-  <!-- Joint limits (radians) - AR4 MK1 configuration -->
+  <!-- Joint limits (radians) - AR4 MK3 configuration -->
   <xacro:property name="j1_limit_min" value="${radians(-170)}"/>
   <xacro:property name="j1_limit_max" value="${radians(170)}"/>
   <xacro:property name="j2_limit_min" value="${radians(-42)}"/>

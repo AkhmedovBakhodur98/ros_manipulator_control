@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `ar4_description` package contains the URDF/Xacro robot description for a 6-DOF AR4 robotic arm (AR4 MK1). This package runs **standalone** — it is not integrated with the manipulator system. No Gazebo — only RViz visualization with `mock_components/GenericSystem` for hardware simulation.
+The `ar4_description` package contains the URDF/Xacro robot description for a 6-DOF AR4 robotic arm (AR4 MK3). This package runs **standalone** — it is not integrated with the manipulator system. No Gazebo — only RViz visualization with `mock_components/GenericSystem` for hardware simulation.
 
 ## Package Structure
 
@@ -121,7 +121,7 @@ STL mesh files for robot visualization and collision detection.
 | `parent` | Yes | Name of the parent link to attach AR4 to |
 | `*origin` | Yes | Origin block (xyz, rpy) for base_joint |
 
-**Joint limits are hardcoded as xacro properties** (from AR4 MK1 reference):
+**Joint limits are hardcoded as xacro properties** (from AR4 MK3 reference):
 - All joints: `effort=1000`, `velocity=1.0472 rad/s` (~60°/s)
 - `damping=100.0`, `friction=10.0`
 
