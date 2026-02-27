@@ -1,6 +1,6 @@
 # Documentation Overview
 
-This directory contains comprehensive documentation for the manipulator ROS2 control system, including the main manipulator, SCARA arm, SCARA control library, unified control interface, REST API bridge, and system bringup.
+This directory contains comprehensive documentation for the manipulator ROS2 control system, including the main manipulator, SCARA arm, SCARA control library, AR4 arm, unified control interface, REST API bridge, and system bringup.
 
 ---
 
@@ -36,6 +36,10 @@ docs/
 │   ├── return_box_server.md               # ReturnBox server documentation
 │   ├── pick_items_from_warehouse_action.md # PickItemsFromWarehouse architectural design
 │   └── pick_items_from_warehouse_server.md # PickItemsFromWarehouse server documentation
+├── ar4_description/                       # AR4 arm documentation
+│   └── package_structure.md               # Package structure and files
+├── ar4_control/                           # AR4 arm control documentation
+│   └── package_structure.md               # Package structure (placeholder)
 ├── rest_api_bridge/                       # REST API bridge documentation
 │   ├── package_structure.md               # Package structure and API reference
 │   ├── API_REFERENCE.md                   # Complete API specification (English)
@@ -59,8 +63,9 @@ docs/
 1. Start with [project_structure/overview.md](project_structure/overview.md) for a high-level project overview
 2. Read [manipulator_description/package_structure.md](manipulator_description/package_structure.md) to understand the main system
 3. Read [scara_description/package_structure.md](scara_description/package_structure.md) to learn about the SCARA module
-4. Read [ros_control/package_structure.md](ros_control/package_structure.md) to understand the control interface
-5. Read [manipulator_bringup/launch_files.md](manipulator_bringup/launch_files.md) to understand how everything starts
+4. Read [ar4_description/package_structure.md](ar4_description/package_structure.md) to learn about the AR4 standalone arm
+5. Read [ros_control/package_structure.md](ros_control/package_structure.md) to understand the control interface
+6. Read [manipulator_bringup/launch_files.md](manipulator_bringup/launch_files.md) to understand how everything starts
 
 **Configuration:**
 - [scara_description/configuration.md](scara_description/configuration.md) - Configure SCARA parameters
@@ -223,6 +228,32 @@ docs/
 - Configuration changes
 
 **When to read:** When you need to control SCARA programmatically, understand the control architecture, or integrate with real hardware.
+
+---
+
+## AR4 Description Documentation
+
+### [package_structure.md](ar4_description/package_structure.md)
+**Purpose:** Complete overview of the ar4_description package — standalone 6-DOF AR4 arm (AR4 MK1).
+
+**Contents:**
+- Package organization and file descriptions
+- Robot kinematic structure (8 links, 8 joints, J1-J6 revolute)
+- Joint specifications (limits, velocities)
+- Hardware interface (mock_components/GenericSystem)
+- Usage examples (launch, trajectory commands, monitoring)
+- ROS2 topics and actions reference
+
+**When to read:** When you need to understand the AR4 arm, launch it standalone, or send trajectory commands.
+
+---
+
+## AR4 Control Documentation
+
+### [package_structure.md](ar4_control/package_structure.md)
+**Purpose:** Overview of the ar4_control placeholder package for future AR4 arm control development.
+
+**When to read:** When you plan to implement AR4 control logic.
 
 ---
 
@@ -590,6 +621,10 @@ docs/
 - Read [manipulator_description/yaml_to_urdf.md](manipulator_description/yaml_to_urdf.md) for parameter system
 - Read package structure documents for file organization
 
+**...launch the AR4 arm standalone:**
+- Read [ar4_description/package_structure.md](ar4_description/package_structure.md)
+- Run: `ros2 launch manipulator_bringup ar4_bringup.launch.py`
+
 **...see what's new:**
 - Read [scara_description/CHANGELOG.md](scara_description/CHANGELOG.md)
 
@@ -640,6 +675,12 @@ manipulator_description (robot model)
     └── scara_description (optional module)
         └── SCARA arm (3-DOF arm)
             └── Attaches to picker_frame
+
+ar4_description (standalone robot)
+    └── AR4 arm (6-DOF) → standalone, not attached to manipulator
+
+ar4_control (placeholder for future AR4 control)
+    └── Empty — ready for future development
 
 scara_control (SCARA arm control library)
     │
@@ -704,6 +745,11 @@ ros2 launch manipulator_description display.launch.py use_scara:=true
 ros2 launch scara_description display.launch.py
 ```
 
+**AR4 standalone:**
+```bash
+ros2 launch manipulator_bringup ar4_bringup.launch.py
+```
+
 ### Action Commands
 
 ```bash
@@ -766,6 +812,7 @@ curl -X POST http://localhost:8080/api/v1/get_items \
 - `src/manipulator_description/config/manipulator_controllers.yaml` - Manipulator controllers
 - `src/scara_description/config/scara_params.yaml` - SCARA parameters + ScaraClient config
 - `src/scara_description/config/scara_controllers.yaml` - SCARA controllers
+- `src/ar4_description/config/ar4_controllers.yaml` - AR4 controllers
 - `src/ros_control/config/move_joint_group_config.yaml` - Joint movement server config
 - `src/ros_control/config/gripper_config.yaml` - Gripper service config
 - `src/ros_control/config/get_container_config.yaml` - GetContainer server config

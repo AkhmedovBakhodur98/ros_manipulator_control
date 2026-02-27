@@ -1023,11 +1023,180 @@ This ensures:
 
 ---
 
+---
+
+## Launch File: `ar4_bringup.launch.py`
+
+### Purpose
+
+Standalone launch file for the AR4 6-DOF arm. Starts the AR4 with ros2_control (mock hardware) and RViz visualization. Completely independent from the manipulator system — no action servers, no SCARA, no gripper.
+
+### Launch Arguments
+
+| Argument | Type | Default | Description |
+|----------|------|---------|-------------|
+| `use_sim_time` | `bool` | `false` | Use simulation clock |
+| `rviz` | `bool` | `true` | Launch RViz2 with pre-configured AR4 visualization |
+
+### Usage Examples
+
+```bash
+# Full AR4 bringup with RViz
+ros2 launch manipulator_bringup ar4_bringup.launch.py
+
+# Without visualization
+ros2 launch manipulator_bringup ar4_bringup.launch.py rviz:=false
+
+# With simulation time
+ros2 launch manipulator_bringup ar4_bringup.launch.py use_sim_time:=true
+```
+
+---
+
+### Launch Process
+
+```
+1. Parse Launch Arguments
+   ├─► use_sim_time (default: false)
+   └─► rviz (default: true)
+
+2. Process URDF/Xacro
+   ├─► Load ar4_description/urdf/robot.urdf.xacro
+   └─► Enable ros2_control (use_ros2_control:=true)
+
+3. Start robot_state_publisher
+   └─► Publishes TF tree
+
+4. Start controller_manager
+   ├─► Loads ar4_controllers.yaml
+   └─► Loads ar4_hardware (mock_components/GenericSystem)
+
+5. Spawn Controllers (in order)
+   ├─► joint_state_broadcaster (first)
+   └─► arm_controller (after joint_state_broadcaster via OnProcessExit)
+
+6. Start RViz2 (if rviz:=true)
+   └─► Loads ar4.rviz config
+```
+
+---
+
+### Nodes Started
+
+#### 1. robot_state_publisher
+
+**Package:** `robot_state_publisher`
+**Purpose:** Publishes TF tree from AR4 URDF description
+
+**Parameters:**
+- `robot_description` - URDF XML string (from xacro)
+- `use_sim_time` - Use simulation clock
+
+#### 2. controller_manager (ros2_control_node)
+
+**Package:** `controller_manager`
+**Purpose:** Manages AR4 controller lifecycle and mock hardware interface
+
+**Parameters:**
+- `robot_description` - URDF XML string (includes hardware interface)
+- `ar4_controllers.yaml` - Controller configurations
+
+#### 3. joint_state_broadcaster
+
+**Spawned:** First
+**Purpose:** Publishes joint states (J1-J6) to `/joint_states`
+
+#### 4. arm_controller
+
+**Spawned:** After `joint_state_broadcaster` (via OnProcessExit event handler)
+**Type:** `joint_trajectory_controller/JointTrajectoryController`
+**Joints:** J1, J2, J3, J4, J5, J6
+
+**Action:** `/arm_controller/follow_joint_trajectory`
+
+#### 5. rviz2 (Conditional)
+
+**Condition:** `rviz:=true`
+**Config:** `ar4_description/rviz/ar4.rviz`
+
+---
+
+### Execution Order
+
+```
+joint_state_broadcaster exits
+  └── arm_controller
+```
+
+Simple two-step chain. No race conditions possible (only one controller spawned after broadcaster).
+
+---
+
+### Configuration Files Used
+
+| File | Location | Purpose |
+|------|----------|---------|
+| `ar4_controllers.yaml` | `ar4_description/config/` | Controller definitions (arm_controller for J1-J6) |
+| `ar4.rviz` | `ar4_description/rviz/` | RViz visualization config |
+
+---
+
+### Controlling the AR4 Arm
+
+**Send trajectory goal:**
+```bash
+ros2 action send_goal /arm_controller/follow_joint_trajectory \
+  control_msgs/action/FollowJointTrajectory "{
+    trajectory: {
+      joint_names: [J1, J2, J3, J4, J5, J6],
+      points: [
+        {positions: [0.5, 0.3, -0.3, 0.8, -0.5, 1.0], time_from_start: {sec: 3}},
+        {positions: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0], time_from_start: {sec: 6}}
+      ]
+    }
+  }"
+```
+
+**Check controllers:**
+```bash
+ros2 control list_controllers
+ros2 control list_hardware_interfaces
+```
+
+**Monitor joint states:**
+```bash
+ros2 topic echo /joint_states
+```
+
+---
+
+### Troubleshooting
+
+#### Controllers Not Starting
+
+**Problem:** Controllers fail to spawn
+
+**Check:**
+1. Controller manager is running: `ros2 node list | grep controller_manager`
+2. Hardware interface is loaded: `ros2 control list_hardware_interfaces`
+
+#### RViz Shows "Frame [map] does not exist"
+
+**Solution:** Set fixed frame to `world` in RViz (top-left, Global Options → Fixed Frame). The pre-configured `ar4.rviz` already sets this correctly.
+
+#### Arm Not Visible in RViz
+
+**Solution:** Ensure RobotModel display is added with Description Topic set to `/robot_description`. The pre-configured `ar4.rviz` includes this automatically.
+
+---
+
 ## Related Documentation
 
 - **Package Structure**: [package_structure.md](package_structure.md) - Overall package architecture
 - **Manipulator Controllers**: `../manipulator_description/package_structure.md`
 - **SCARA Controllers**: `../scara_description/ros2_control.md`
+- **AR4 Description**: `../ar4_description/package_structure.md`
+- **AR4 Control**: `../ar4_control/package_structure.md`
 - **Unified Control**: `../ros_control/package_structure.md`
 - **Gripper Service**: `../ros_control/gripper_service.md`
 - **GetContainer Server**: `../ros_control/get_container_server.md`

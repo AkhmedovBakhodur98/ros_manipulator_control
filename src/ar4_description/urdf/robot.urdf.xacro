@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<!--
+  AR4 6-DOF Robot Arm - Main URDF Entry Point
+
+  This is the top-level xacro file for the standalone AR4 arm.
+  Includes the arm macro and ros2_control hardware interface.
+
+  Usage:
+    xacro robot.urdf.xacro use_ros2_control:=true
+-->
+<robot name="ar4" xmlns:xacro="http://wiki.ros.org/xacro">
+
+  <!-- Arguments -->
+  <xacro:arg name="use_ros2_control" default="true"/>
+
+  <!-- Include macros -->
+  <xacro:include filename="$(find ar4_description)/urdf/ar4_macro.xacro"/>
+  <xacro:include filename="$(find ar4_description)/urdf/ar4_ros2_control.urdf.xacro"/>
+
+  <!-- World link (fixed reference frame) -->
+  <link name="world"/>
+
+  <!-- Instantiate AR4 arm attached to world -->
+  <xacro:ar4_robot tf_prefix="" parent="world">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </xacro:ar4_robot>
+
+  <!-- ros2_control hardware interface -->
+  <xacro:if value="$(arg use_ros2_control)">
+    <xacro:ar4_ros2_control/>
+  </xacro:if>
+
+</robot>

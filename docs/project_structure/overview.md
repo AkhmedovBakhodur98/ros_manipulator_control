@@ -9,14 +9,18 @@ src/
 ├── manipulator_bringup/      # Launch infrastructure
 ├── manipulator_description/  # Main manipulator robot
 ├── ros_control/              # Unified control interface
-└── scara_description/        # SCARA arm module (optional)
+├── scara_description/        # SCARA arm module (optional)
+├── scara_control/            # SCARA arm control library
+├── ar4_description/          # AR4 6-DOF arm (standalone)
+└── ar4_control/              # AR4 arm control (placeholder)
 ```
 
 ## Package Descriptions
 
 ### manipulator_bringup
 Central launch package that starts the entire system.
-- `launch/manipulator_bringup.launch.py` - Main entry point
+- `launch/manipulator_bringup.launch.py` - Main entry point (manipulator system)
+- `launch/ar4_bringup.launch.py` - AR4 standalone bringup
 
 ### manipulator_description
 Main manipulator robot definition.
@@ -53,6 +57,16 @@ Modular 3-DOF SCARA arm (can be used standalone or attached to manipulator).
 - `meshes/` - SCARA 3D models
 - `urdf/` - SCARA robot description
 
+### ar4_description
+Standalone 6-DOF AR4 arm (AR4 MK1). Not integrated with the manipulator system.
+- `config/` - Controller configuration (arm_controller for J1-J6)
+- `meshes/` - Visual and collision STL models (7 links)
+- `rviz/` - Pre-configured RViz visualization
+- `urdf/` - Robot description (macro + ros2_control + entry point)
+
+### ar4_control
+Minimal placeholder package for future AR4 arm control development. Follows `scara_control` pattern (`ament_python`), currently empty.
+
 ## Key Configuration Files
 
 | File | Purpose |
@@ -61,6 +75,7 @@ Modular 3-DOF SCARA arm (can be used standalone or attached to manipulator).
 | `manipulator_controllers.yaml` | Manipulator ros2_control |
 | `scara_params.yaml` | SCARA geometry/limits |
 | `scara_controllers.yaml` | SCARA ros2_control |
+| `ar4_controllers.yaml` | AR4 ros2_control |
 
 ## Quick Start
 
@@ -73,6 +88,9 @@ ros2 launch manipulator_bringup manipulator_bringup.launch.py
 
 # SCARA standalone
 ros2 launch scara_description scara_control.launch.py
+
+# AR4 standalone
+ros2 launch manipulator_bringup ar4_bringup.launch.py
 ```
 
 ## Architecture
@@ -84,4 +102,7 @@ manipulator_description
     ├── Picker assembly (fine adjustment)
     └── scara_description (optional)
         └── SCARA arm (3-DOF) → attaches to picker_frame
+
+ar4_description (standalone robot)
+    └── AR4 arm (6-DOF) → standalone, not attached to manipulator
 ```

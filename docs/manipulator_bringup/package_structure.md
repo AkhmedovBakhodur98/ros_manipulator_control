@@ -20,7 +20,8 @@ src/manipulator_bringup/
 ├── CMakeLists.txt                    # Build configuration
 ├── package.xml                       # Package metadata and dependencies
 └── launch/
-    └── manipulator_bringup.launch.py # Main launch file (starts all infrastructure)
+    ├── manipulator_bringup.launch.py # Main launch file (starts all manipulator infrastructure)
+    └── ar4_bringup.launch.py         # AR4 standalone bringup (ros2_control + RViz)
 ```
 
 ---
@@ -55,6 +56,7 @@ ROS2 package manifest defining package metadata and dependencies.
 | **Build** | `ament_cmake` | ROS2 build system |
 | **Runtime** | `manipulator_description` | Manipulator robot description |
 | **Runtime** | `scara_description` | SCARA arm description (optional) |
+| **Runtime** | `ar4_description` | AR4 arm description (standalone) |
 | **Runtime** | `ros_control` | Unified control interface |
 | **Runtime** | `controller_manager` | Controller lifecycle management |
 | **Runtime** | `robot_state_publisher` | TF tree publishing |
@@ -67,7 +69,7 @@ ROS2 package manifest defining package metadata and dependencies.
 
 ### `launch/manipulator_bringup.launch.py`
 
-**Main launch file** that starts all infrastructure components.
+**Main launch file** that starts all manipulator infrastructure components.
 
 **What it does:**
 1. Starts robot description (manipulator + optional SCARA)
@@ -83,6 +85,35 @@ ROS2 package manifest defining package metadata and dependencies.
 - **Single source of truth**: Uses existing controller YAML files, no duplication
 
 **See:** [launch_files.md](launch_files.md) for detailed documentation.
+
+### `launch/ar4_bringup.launch.py`
+
+**AR4 standalone launch file** — starts the AR4 6-DOF arm with ros2_control and RViz.
+
+**What it does:**
+1. Processes AR4 xacro with `use_ros2_control:=true`
+2. Starts `robot_state_publisher`
+3. Starts `controller_manager` with `ar4_controllers.yaml`
+4. Spawns `joint_state_broadcaster`
+5. Spawns `arm_controller` (delayed, after joint_state_broadcaster via OnProcessExit)
+6. Optionally launches RViz2 with pre-configured `ar4.rviz`
+
+**Launch arguments:**
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `use_sim_time` | `false` | Use simulation clock |
+| `rviz` | `true` | Launch RViz2 |
+
+**Usage:**
+```bash
+# Full AR4 bringup with RViz
+ros2 launch manipulator_bringup ar4_bringup.launch.py
+
+# Without RViz
+ros2 launch manipulator_bringup ar4_bringup.launch.py rviz:=false
+```
+
+**Note:** This launch file is completely independent from the manipulator system. No action servers, no SCARA integration, no gripper.
 
 ---
 
@@ -355,5 +386,7 @@ Potential additions to the bringup package:
 - **Launch Files**: [launch_files.md](launch_files.md) - Detailed launch file documentation
 - **Manipulator Description**: `../manipulator_description/package_structure.md`
 - **SCARA Description**: `../scara_description/package_structure.md`
+- **AR4 Description**: `../ar4_description/package_structure.md`
+- **AR4 Control**: `../ar4_control/package_structure.md`
 - **Unified Control**: `../ros_control/package_structure.md`
 

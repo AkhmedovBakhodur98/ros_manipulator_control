@@ -1,0 +1,104 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    ros2_control hardware interface definition for AR4 6-DOF arm
+
+    Uses mock_components/GenericSystem for testing without real hardware.
+
+    Joints controlled (6):
+      - J1: Base rotation (Z-axis, ±170°)
+      - J2: Shoulder (Z-axis, -42° to 90°)
+      - J3: Elbow (Z-axis, -89° to 52°)
+      - J4: Wrist roll (Z-axis, ±165°)
+      - J5: Wrist pitch (X-axis, ±105°)
+      - J6: Wrist yaw (Z-axis, ±155°)
+  -->
+
+  <xacro:macro name="ar4_ros2_control">
+
+    <ros2_control name="ar4_hardware" type="system">
+
+      <hardware>
+        <plugin>mock_components/GenericSystem</plugin>
+        <param name="mock_sensor_commands">true</param>
+        <param name="state_following_offset">0.0</param>
+      </hardware>
+
+      <!-- J1: Base rotation -->
+      <joint name="J1">
+        <command_interface name="position">
+          <param name="min">${radians(-170)}</param>
+          <param name="max">${radians(170)}</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+
+      <!-- J2: Shoulder -->
+      <joint name="J2">
+        <command_interface name="position">
+          <param name="min">${radians(-42)}</param>
+          <param name="max">${radians(90)}</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+
+      <!-- J3: Elbow -->
+      <joint name="J3">
+        <command_interface name="position">
+          <param name="min">${radians(-89)}</param>
+          <param name="max">${radians(52)}</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+
+      <!-- J4: Wrist roll -->
+      <joint name="J4">
+        <command_interface name="position">
+          <param name="min">${radians(-165)}</param>
+          <param name="max">${radians(165)}</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+
+      <!-- J5: Wrist pitch -->
+      <joint name="J5">
+        <command_interface name="position">
+          <param name="min">${radians(-105)}</param>
+          <param name="max">${radians(105)}</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+
+      <!-- J6: Wrist yaw -->
+      <joint name="J6">
+        <command_interface name="position">
+          <param name="min">${radians(-155)}</param>
+          <param name="max">${radians(155)}</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+
+    </ros2_control>
+
+  </xacro:macro>
+
+</robot>
