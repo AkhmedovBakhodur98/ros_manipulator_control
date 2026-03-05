@@ -88,6 +88,19 @@ bool TeensyProtocol::home(int id, int timeout_ms) {
     return resp == expected;
 }
 
+bool TeensyProtocol::jog(int id, float speed_steps_per_sec) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::string cmd = "JOG " + std::to_string(id) + " " + std::to_string(speed_steps_per_sec);
+    std::string resp = sendAndExpect(cmd, "OK");
+    return resp == "OK";
+}
+
+bool TeensyProtocol::start() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::string resp = sendAndExpect("START", "OK");
+    return resp == "OK";
+}
+
 bool TeensyProtocol::stop() {
     std::lock_guard<std::mutex> lock(mutex_);
     std::string resp = sendAndExpect("STOP", "OK");

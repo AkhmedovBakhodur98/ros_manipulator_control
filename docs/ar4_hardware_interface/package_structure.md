@@ -59,7 +59,7 @@ src/ar4_hardware_interface/
 CMake build configuration.
 - Builds a shared library `ar4_hardware_interface`
 - Exports pluginlib plugin descriptor
-- Dependencies: `hardware_interface`, `pluginlib`, `rclcpp`, `rclcpp_lifecycle`, `std_srvs`
+- Dependencies: `hardware_interface`, `pluginlib`, `rclcpp`, `rclcpp_lifecycle`, `std_msgs`, `std_srvs`
 
 #### `package.xml`
 
@@ -72,7 +72,8 @@ ROS2 package manifest.
 | Runtime | `pluginlib` | Plugin registration |
 | Runtime | `rclcpp` | ROS2 C++ client |
 | Runtime | `rclcpp_lifecycle` | Lifecycle state types |
-| Runtime | `std_srvs` | `Trigger` service for calibration |
+| Runtime | `std_msgs` | `Float64MultiArray` for jog commands |
+| Runtime | `std_srvs` | `Trigger` service for calibration and start |
 
 #### `ar4_hardware_interface_plugin.xml`
 
@@ -134,6 +135,8 @@ Thread-safe typed interface for the Teensy serial protocol.
 | `moveTo(id, steps)` | `MT <id> <steps>` → `OK` | `bool` |
 | `getPositions()` | `GP` → `POS <s0> ...` | `vector<long>` |
 | `home(id, timeout_ms=30000)` | `HOME <id>` → `HOMED <id>` | `bool` |
+| `jog(id, speed)` | `JOG <id> <speed>` → `OK` | `bool` |
+| `start()` | `START` → `OK` | `bool` |
 | `stop()` | `STOP` → `OK` | `bool` |
 | `mutex()` | — | `std::mutex&` |
 
@@ -152,7 +155,7 @@ Plugin lifecycle and real-time read/write loop.
 | Method | What it does |
 |--------|-------------|
 | `on_init(params)` | Parse URDF `<param>` tags: `serial_port`, `baud_rate`, per-joint `motor_id`, `steps_per_rev`, `gear_ratio`, `microsteps`, `home_offset_rad` |
-| `on_configure()` | Open serial port, wait 2s for Teensy boot, send `PING`, create `/ar4_hardware/calibrate` service |
+| `on_configure()` | Open serial port, wait 2s for Teensy boot, send `PING`, create `/ar4_hardware/calibrate` service, `/ar4_hardware/start` service, `/ar4_hardware/jog` subscriber |
 | `on_activate()` | Send `EN`, set commands = current state (no jump) |
 | `on_deactivate()` | Send `DIS` |
 | `on_cleanup()` | Reset service, close serial port |
@@ -162,12 +165,23 @@ Plugin lifecycle and real-time read/write loop.
 | Method | Behavior |
 |--------|----------|
 | `read()` | If not homed: report 0.0 for all joints. If homed: send `GP`, convert steps → radians, compute velocity from position delta |
-| `write()` | If not homed: skip. If homed: for each joint, convert commanded radians → steps, send `MT` if changed |
+| `write()` | If not homed: skip. If jogging: check watchdog (200ms timeout → stop all), skip `MT`. If homed: for each joint, convert commanded radians → steps, send `MT` if changed |
 
 **Calibrate service** (`std_srvs/Trigger` on `/ar4_hardware/calibrate`):
 - Iterates over all configured joints, sends `HOME <motor_id>` with 30s timeout
 - On success: sets `is_homed_ = true`, position tracking becomes active
 - On failure: reports which motor failed, `is_homed_` stays false
+
+**Start service** (`std_srvs/Trigger` on `/ar4_hardware/start`):
+- Sends `START` to firmware — marks all joints homed at their configured start positions (skips physical homing)
+- On success: sets `is_homed_ = true`
+
+**Jog subscriber** (`std_msgs/Float64MultiArray` on `/ar4_hardware/jog`):
+- Receives 6-element array of joint velocities in rad/s
+- Converts rad/s → steps/s per joint and sends `JOG` commands to firmware
+- Sets `is_jogging_ = true` while any joint has non-zero velocity
+- **Watchdog:** if no jog message received for 200ms, sends `STOP` to firmware and clears jog state
+- While jogging, `write()` skips normal `MT` position commands
 
 #### `src/serial_port.cpp`
 
@@ -356,6 +370,32 @@ ros2 control list_hardware_components
 
 # Monitor joint states
 ros2 topic echo /joint_states --once
+```
+
+### Start (Skip Homing)
+
+```bash
+# Mark all joints homed at start positions (arm must be at start pose)
+ros2 service call /ar4_hardware/start std_srvs/srv/Trigger
+```
+
+### Jog (Velocity Control)
+
+```bash
+# Jog J1 at 0.5 rad/s (publish at 20Hz to keep watchdog alive)
+ros2 topic pub /ar4_hardware/jog std_msgs/msg/Float64MultiArray \
+  "{data: [0.5, 0, 0, 0, 0, 0]}" -r 20
+
+# Stop publishing (Ctrl+C) → watchdog triggers in 200ms → motors stop
+```
+
+### DualShock 4 Teleop
+
+```bash
+# Launch joy_node + teleop_joy together
+ros2 launch ar4_control teleop_joy.launch.py
+
+# Press SHARE to call START, then use sticks to jog joints
 ```
 
 ### Calibrate and Move

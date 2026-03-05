@@ -1,3 +1,4 @@
+#include <math.h>
 #include "motor.h"
 
 Motor motors[NUM_JOINTS];
@@ -5,7 +6,9 @@ Motor motors[NUM_JOINTS];
 Motor::Motor()
     : stepper_(AccelStepper::DRIVER, 0, 0),
       homed_(false),
-      homing_(false) {}
+      homing_(false),
+      jogging_(false),
+      saved_max_speed_(0.0f) {}
 
 void Motor::init(uint8_t step_pin, uint8_t dir_pin, bool dir_invert,
                  float max_speed, float accel) {
@@ -29,7 +32,7 @@ void Motor::init(uint8_t step_pin, uint8_t dir_pin, bool dir_invert,
 }
 
 bool Motor::moveTo(long target_steps) {
-    if (homing_) return false;
+    if (homing_ || jogging_) return false;
     stepper_.moveTo(target_steps);
     return true;
 }
@@ -58,6 +61,13 @@ void Motor::run() {
     long before = stepper_.currentPosition();
     stepper_.run();
     long after = stepper_.currentPosition();
+
+    // Auto-clear jogging state when deceleration completes
+    if (jogging_ && stepper_.distanceToGo() == 0) {
+        stepper_.setMaxSpeed(saved_max_speed_);
+        jogging_ = false;
+    }
+
     if (before != after) {
         static unsigned long last_step_dbg = 0;
         if (millis() - last_step_dbg >= 2000) {
@@ -70,6 +80,39 @@ void Motor::run() {
 
 void Motor::stop() {
     stepper_.stop();
+}
+
+void Motor::jogAt(float speed_steps_per_sec) {
+    if (!jogging_) {
+        saved_max_speed_ = stepper_.maxSpeed();
+    }
+    jogging_ = true;
+
+    float abs_speed = fabs(speed_steps_per_sec);
+    if (abs_speed < 1.0f) {
+        // Treat near-zero as stop
+        stopJog();
+        return;
+    }
+
+    stepper_.setMaxSpeed(abs_speed);
+    long target = (speed_steps_per_sec > 0) ? 2000000000L : -2000000000L;
+    stepper_.moveTo(target);
+}
+
+void Motor::stopJog() {
+    if (!jogging_) return;
+    stepper_.stop();  // Decelerate to zero
+    // Restore maxSpeed after decel completes (handled in run())
+    // But if already stopped, restore immediately
+    if (stepper_.distanceToGo() == 0) {
+        stepper_.setMaxSpeed(saved_max_speed_);
+        jogging_ = false;
+    }
+}
+
+bool Motor::isJogging() const {
+    return jogging_;
 }
 
 void Motor::setHomed(bool h) {

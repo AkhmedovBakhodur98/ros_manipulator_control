@@ -8,6 +8,7 @@
 #include "hardware_interface/system_interface.hpp"
 #include "hardware_interface/types/hardware_component_interface_params.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "std_msgs/msg/float64_multi_array.hpp"
 #include "std_srvs/srv/trigger.hpp"
 
 #include "ar4_hardware_interface/serial_port.hpp"
@@ -90,6 +91,20 @@ private:
     void calibrateCallback(
         const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
         std::shared_ptr<std_srvs::srv::Trigger::Response> response);
+
+    // Start service (skip homing, mark at start positions)
+    rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr start_service_;
+
+    void startCallback(
+        const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+        std::shared_ptr<std_srvs::srv::Trigger::Response> response);
+
+    // Jog control
+    rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr jog_subscription_;
+    std::atomic<bool> is_jogging_{false};
+    rclcpp::Time last_jog_time_;
+
+    void jogCallback(const std_msgs::msg::Float64MultiArray::SharedPtr msg);
 
     // Previous commanded positions (for skip-if-unchanged optimization)
     std::vector<long> prev_cmd_steps_;

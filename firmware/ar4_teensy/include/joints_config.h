@@ -71,7 +71,7 @@ constexpr JointConfig JOINTS[NUM_JOINTS] = {
     // Limit switch at -89°, soft limits -89° to +52°
     {
         .pins   = { .step_pin = 4, .dir_pin = 5, .limit_pin = 31, .dir_invert = false },  // PLACEHOLDER — set actual pins
-        .motion = { .max_speed = 4000.0f, .accel = 2000.0f },
+        .motion = { .max_speed = 6000.0f, .accel = 3000.0f },
         .homing = { .speed_fast = 2000.0f, .speed_slow = 300.0f,
                     .backoff_steps = 800, .home_dir = -1, .home_offset_steps = -39556 },
         .limits = { .min_steps = -39556, .max_steps = 23111, .enabled = true },

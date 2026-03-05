@@ -133,9 +133,45 @@ static void handleStart() {
     Protocol::respond("OK");
 }
 
+static void handleJog(char* args) {
+    int id;
+    float speed;
+    if (sscanf(args, "%d %f", &id, &speed) != 2) {
+        Protocol::respondError(ERR_BAD_ARGS, "JOG requires <id> <speed>");
+        return;
+    }
+
+    if (id < 0 || id >= NUM_JOINTS) {
+        Protocol::respondError(ERR_INVALID_ID, "Invalid motor id");
+        return;
+    }
+
+    if (motors[id].isHoming()) {
+        Protocol::respondError(ERR_MOTOR_BUSY, "Motor is homing");
+        return;
+    }
+
+    if (!motors[id].isHomed()) {
+        Protocol::respondError(ERR_MOTOR_BUSY, "Motor not homed");
+        return;
+    }
+
+    // Clamp speed to per-joint max
+    float max_spd = JOINTS[id].motion.max_speed;
+    if (speed > max_spd) speed = max_spd;
+    if (speed < -max_spd) speed = -max_spd;
+
+    motors[id].jogAt(speed);
+    Protocol::respond("OK");
+}
+
 static void handleStop() {
     for (uint8_t i = 0; i < NUM_JOINTS; i++) {
-        motors[i].stop();
+        if (motors[i].isJogging()) {
+            motors[i].stopJog();
+        } else {
+            motors[i].stop();
+        }
     }
     Protocol::respond("OK");
 }
@@ -169,6 +205,8 @@ static void dispatch(char* line) {
         handleDisable();
     } else if (strncmp(line, "MT ", 3) == 0) {
         handleMoveTo(line + 3);
+    } else if (strncmp(line, "JOG ", 4) == 0) {
+        handleJog(line + 4);
     } else if (strncmp(line, "GP", 2) == 0) {
         handleGetPositions();
     } else if (strncmp(line, "HOME ", 5) == 0) {

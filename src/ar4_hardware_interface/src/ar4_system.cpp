@@ -95,6 +95,23 @@ hardware_interface::CallbackReturn Ar4System::on_configure(
 
     RCLCPP_INFO(get_logger(), "Calibration service available at /ar4_hardware/calibrate");
 
+    // Create start service
+    start_service_ = node->create_service<std_srvs::srv::Trigger>(
+        "/ar4_hardware/start",
+        std::bind(&Ar4System::startCallback, this,
+                  std::placeholders::_1, std::placeholders::_2));
+
+    RCLCPP_INFO(get_logger(), "Start service available at /ar4_hardware/start");
+
+    // Create jog subscriber
+    jog_subscription_ = node->create_subscription<std_msgs::msg::Float64MultiArray>(
+        "/ar4_hardware/jog", rclcpp::SensorDataQoS(),
+        std::bind(&Ar4System::jogCallback, this, std::placeholders::_1));
+
+    RCLCPP_INFO(get_logger(), "Jog subscriber listening on /ar4_hardware/jog");
+
+    last_jog_time_ = rclcpp::Time(0, 0, RCL_ROS_TIME);
+
     return hardware_interface::CallbackReturn::SUCCESS;
 }
 
@@ -136,10 +153,13 @@ hardware_interface::CallbackReturn Ar4System::on_cleanup(
 
     RCLCPP_INFO(get_logger(), "Cleaning up: closing serial port");
 
+    jog_subscription_.reset();
+    start_service_.reset();
     calibrate_service_.reset();
     protocol_.reset();
     serial_port_.close();
     is_homed_ = false;
+    is_jogging_ = false;
 
     return hardware_interface::CallbackReturn::SUCCESS;
 }
@@ -180,10 +200,22 @@ hardware_interface::return_type Ar4System::read(
 }
 
 hardware_interface::return_type Ar4System::write(
-    const rclcpp::Time& /*time*/, const rclcpp::Duration& /*period*/) {
+    const rclcpp::Time& time, const rclcpp::Duration& /*period*/) {
 
     if (!is_homed_.load()) {
         // Not homed — do not send movement commands
+        return hardware_interface::return_type::OK;
+    }
+
+    // Jog watchdog: if jogging and no message for 200ms, stop all
+    if (is_jogging_.load()) {
+        auto elapsed = time - last_jog_time_;
+        if (elapsed.seconds() > 0.2) {
+            RCLCPP_WARN(get_logger(), "Jog watchdog triggered — stopping all joints");
+            protocol_->stop();
+            is_jogging_ = false;
+        }
+        // While jogging, skip normal MT commands
         return hardware_interface::return_type::OK;
     }
 
@@ -200,6 +232,59 @@ hardware_interface::return_type Ar4System::write(
     }
 
     return hardware_interface::return_type::OK;
+}
+
+void Ar4System::startCallback(
+    const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,
+    std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+
+    RCLCPP_INFO(get_logger(), "START requested — marking all joints at start positions");
+
+    if (protocol_->start()) {
+        is_homed_ = true;
+        response->success = true;
+        response->message = "All joints marked as homed at start positions";
+        RCLCPP_INFO(get_logger(), "START complete — arm is ready");
+    } else {
+        response->success = false;
+        response->message = "START command failed";
+        RCLCPP_ERROR(get_logger(), "START command failed");
+    }
+}
+
+void Ar4System::jogCallback(const std_msgs::msg::Float64MultiArray::SharedPtr msg) {
+    if (!is_homed_.load()) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000,
+                             "Jog ignored — arm not homed");
+        return;
+    }
+
+    if (msg->data.size() < joint_configs_.size()) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000,
+                             "Jog message has %zu values, expected %zu",
+                             msg->data.size(), joint_configs_.size());
+        return;
+    }
+
+    bool any_nonzero = false;
+    for (size_t i = 0; i < joint_configs_.size(); i++) {
+        const auto& cfg = joint_configs_[i];
+        // Convert rad/s to steps/s
+        float speed_steps = static_cast<float>(
+            msg->data[i] / (2.0 * M_PI) * cfg.stepsPerOutputRev());
+        if (std::abs(speed_steps) > 1.0f) {
+            any_nonzero = true;
+        }
+        protocol_->jog(cfg.motor_id, speed_steps);
+    }
+
+    if (any_nonzero) {
+        is_jogging_ = true;
+        last_jog_time_ = get_clock()->now();
+    } else {
+        // All zeros — stop jogging
+        is_jogging_ = false;
+    }
 }
 
 void Ar4System::calibrateCallback(

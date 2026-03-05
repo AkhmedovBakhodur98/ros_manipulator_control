@@ -206,8 +206,8 @@ Includes `joints_config.h` at the end, so any file including `config.h` gets acc
 | `dir_pin` | 5 | Direction output (PLACEHOLDER — set actual pins) |
 | `limit_pin` | 31 | Limit switch input |
 | `dir_invert` | false | No DIR inversion |
-| `max_speed` | 4000 steps/s | Motion speed |
-| `accel` | 2000 steps/s² | Acceleration |
+| `max_speed` | 6000 steps/s | Motion speed |
+| `accel` | 3000 steps/s² | Acceleration |
 | `speed_fast` | 2000 steps/s | Homing fast approach |
 | `speed_slow` | 300 steps/s | Homing slow approach |
 | `backoff_steps` | 800 | Back-off after switch trigger |
@@ -302,8 +302,11 @@ Motor controller class wrapping AccelStepper. No enable/disable — MKS SERVO42C
 
 **Class `Motor`:**
 - `init(step_pin, dir_pin, max_speed, accel)` — configure pins, set 50µs min pulse width
-- `moveTo(target_steps)` — command absolute position (returns false if homing)
+- `moveTo(target_steps)` — command absolute position (returns false if homing or jogging)
 - `forceMoveTo(target_steps)` — bypasses homing guard (used internally by homing code)
+- `jogAt(speed_steps_per_sec)` — start velocity-mode jogging (saves maxSpeed, sets far-away target)
+- `stopJog()` — decelerate and restore original maxSpeed
+- `isJogging()` — true if currently in jog mode
 - `currentPosition()` / `setCurrentPosition(pos)` — read/set step counter
 - `isRunning()` — true if motor is moving
 - `distanceToGo()` — remaining distance to target (sign indicates direction)
@@ -349,7 +352,8 @@ Command dispatcher. Parses commands from the serial buffer and calls handlers:
 | `GP` | `handleGetPositions()` | Responds `POS <s0> [s1 ...]` |
 | `HOME <id>` | `handleHome()` | Starts homing. Response `HOMED <id>` sent asynchronously |
 | `START` | `handleStart()` | Mark all joints as homed at their `start_position_steps`. Rejected if any motor is homing |
-| `STOP` | `handleStop()` | Emergency stop, decelerate all motors |
+| `JOG <id> <speed>` | `handleJog()` | Velocity-mode jogging. Speed in steps/s (sign = direction). Clamped to per-joint `max_speed`. Requires homed. `JOG <id> 0` decelerates to stop |
+| `STOP` | `handleStop()` | Emergency stop, decelerate all motors. Properly clears jog state for jogging motors |
 | `RDPIN` | `handleReadPin()` | Shows limit switch pin state for all joints |
 | `TEST [id]` | inline | Sends 200 manual step pulses on specified joint (default: J0, hardware debug) |
 | `SCAN` | inline | Reads all digital pins 0–41 (pin identification debug) |
@@ -395,7 +399,8 @@ Uses `forceMoveTo()` to bypass the homing guard in `Motor::moveTo()`. Uses `setC
 | Ping | `PING` | `PONG` | Connection check |
 | Enable | `EN` | `OK` | No-op (SERVO42C self-enables), kept for protocol compat |
 | Disable | `DIS` | `OK` | No-op, kept for protocol compat |
-| Move to | `MT <id> <steps>` | `OK` | Absolute position in steps. Rejected if not homed |
+| Move to | `MT <id> <steps>` | `OK` | Absolute position in steps. Rejected if not homed or jogging |
+| Jog | `JOG <id> <speed>` | `OK` | Velocity jogging. Speed in steps/s, sign = direction. `JOG <id> 0` stops. Clamped to `max_speed` |
 | Get positions | `GP` | `POS <s0> [s1 ...]` | Current step counts, space-separated |
 | Home | `HOME <id>` | `HOMED <id>` | Asynchronous — response sent when homing completes |
 | Start | `START` | `OK` | Skip homing — assume all joints at configured start pose |
@@ -409,9 +414,29 @@ Uses `forceMoveTo()` to bypass the homing guard in `Motor::moveTo()`. Uses `setC
 
 - `GP` — works normally, returns current position
 - `MT` — returns `ERR 3 Motor is homing`
+- `JOG` — returns `ERR 3 Motor is homing`
 - `HOME` — returns `ERR 3 Already homing`
 - `START` — returns `ERR 3 Motor is homing`
 - `STOP` — stops all motors (including homing motor)
+
+### JOG Command Details
+
+`JOG <id> <speed>` enables velocity-mode jogging for real-time joystick control.
+
+**How it works:**
+1. Saves the motor's current `maxSpeed`
+2. Sets `maxSpeed` to `|speed|`
+3. Sets target to ±2,000,000,000 steps (effectively infinite) in the direction of `speed`
+4. AccelStepper's `run()` handles smooth acceleration/deceleration
+5. `JOG <id> 0` calls `stop()` to decelerate, then restores original `maxSpeed`
+6. Jog state auto-clears in `run()` when deceleration completes
+
+**Guards:**
+- Rejected if motor is not homed (`ERR 3`)
+- Rejected if motor is homing (`ERR 3`)
+- Speed is clamped to per-joint `max_speed` (from `joints_config.h`)
+- `MT` commands are rejected while jogging
+- Hard/soft limit protection continues to work unchanged during jogging
 
 ### Hard Limit Protection
 
@@ -512,7 +537,16 @@ MT 0 0
 → ...
 → DBG motor=0 REACHED pos=0
 
-# 7. Stop
+# 7. Jog J1 at 2000 steps/s (velocity mode)
+JOG 0 2000
+→ OK
+→ (motor starts moving continuously)
+
+# 8. Stop jog (decelerates)
+JOG 0 0
+→ OK
+
+# 9. Stop all
 STOP
 → OK
 ```

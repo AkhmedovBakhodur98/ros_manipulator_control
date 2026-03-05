@@ -39,6 +39,16 @@ public:
     /// Emergency stop — decelerate to zero speed.
     void stop();
 
+    /// Start jogging at given speed (steps/s). Sign = direction.
+    /// Sets a far-away target and adjusts maxSpeed.
+    void jogAt(float speed_steps_per_sec);
+
+    /// Stop jogging — decelerate and restore original maxSpeed.
+    void stopJog();
+
+    /// Returns true if currently in jog mode.
+    bool isJogging() const;
+
     /// Mark motor as homed / not homed.
     void setHomed(bool h);
     bool isHomed() const;
@@ -51,6 +61,8 @@ private:
     AccelStepper stepper_;
     bool homed_;
     bool homing_;
+    bool jogging_;
+    float saved_max_speed_;
 };
 
 /// Global motor array (indexed by motor_id)

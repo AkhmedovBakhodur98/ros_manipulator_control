@@ -35,6 +35,12 @@ public:
     /// Returns true if HOMED <id> received.
     bool home(int id, int timeout_ms = 30000);
 
+    /// Send JOG <id> <speed>. Returns true on OK.
+    bool jog(int id, float speed_steps_per_sec);
+
+    /// Send START (mark all joints homed at start positions). Returns true on OK.
+    bool start();
+
     /// Send STOP. Returns true on OK.
     bool stop();
 
