@@ -149,6 +149,7 @@ ros2 topic echo /joy
 
 ## Related Documentation
 
+- **Joystick Teleop Guide:** `teleop_joystick_guide.md` — full step-by-step setup and usage
 - **AR4 Hardware Interface:** `../ar4_hardware_interface/package_structure.md`
 - **Teensy Firmware:** `../firmware/ar4_teensy.md`
 - **AR4 Description:** `../ar4_description/package_structure.md`

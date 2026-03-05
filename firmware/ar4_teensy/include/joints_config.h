@@ -68,15 +68,15 @@ constexpr JointConfig JOINTS[NUM_JOINTS] = {
     },
 
     // J3: Elbow — NEMA 17 + MKS SERVO42C + Sumtor 42XG50 (50:1)
-    // Limit switch at -89°, soft limits -89° to +52°
+    // Limit switch at +89°, soft limits -52° to +89° (inverted dir)
     {
-        .pins   = { .step_pin = 4, .dir_pin = 5, .limit_pin = 31, .dir_invert = false },  // PLACEHOLDER — set actual pins
+        .pins   = { .step_pin = 4, .dir_pin = 5, .limit_pin = 31, .dir_invert = true },
         .motion = { .max_speed = 6000.0f, .accel = 3000.0f },
         .homing = { .speed_fast = 2000.0f, .speed_slow = 300.0f,
-                    .backoff_steps = 800, .home_dir = -1, .home_offset_steps = -39556 },
-        .limits = { .min_steps = -39556, .max_steps = 23111, .enabled = true },
+                    .backoff_steps = 800, .home_dir = 1, .home_offset_steps = 39556 },
+        .limits = { .min_steps = -23111, .max_steps = 39556, .enabled = true },
         .steps_per_output_rev = 200L * 16 * 50,  // 160000
-        .start_position_steps = -2800,  // -6.3°
+        .start_position_steps = 2800,  // +6.3°
     },
 
     // J4: Wrist roll — NEMA 11 (28hs5006a4) + MKS SERVO42C + 40:1 planetary

@@ -39,7 +39,7 @@
       <joint name="J2">
         <param name="motor_id">1</param>
         <param name="steps_per_rev">200</param>
-        <param name="gear_ratio">40.0</param>
+        <param name="gear_ratio">100.0</param>
         <param name="microsteps">16</param>
         <param name="home_offset_rad">-0.7330</param>
         <command_interface name="position">
@@ -58,10 +58,10 @@
         <param name="steps_per_rev">200</param>
         <param name="gear_ratio">50.0</param>
         <param name="microsteps">16</param>
-        <param name="home_offset_rad">-1.5533</param>
+        <param name="home_offset_rad">1.5533</param>
         <command_interface name="position">
-          <param name="min">${radians(-89)}</param>
-          <param name="max">${radians(52)}</param>
+          <param name="min">${radians(-52)}</param>
+          <param name="max">${radians(89)}</param>
         </command_interface>
         <state_interface name="position">
           <param name="initial_value">0.0</param>
@@ -87,11 +87,11 @@
       </joint>
 
       <!-- J5: Wrist pitch — NEMA 17 + MKS SERVO42C + T8 lead screw (no gear reducer)
-           PLACEHOLDER gear_ratio — calibrate empirically with real hardware -->
+           gear_ratio=10.0 maps lead screw linear motion to angular (32000 steps/rev) -->
       <joint name="J5">
         <param name="motor_id">4</param>
         <param name="steps_per_rev">200</param>
-        <param name="gear_ratio">1.0</param>
+        <param name="gear_ratio">10.0</param>
         <param name="microsteps">16</param>
         <param name="home_offset_rad">1.7104</param>
         <command_interface name="position">

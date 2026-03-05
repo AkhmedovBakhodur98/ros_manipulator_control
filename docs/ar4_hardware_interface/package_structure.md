@@ -224,7 +224,7 @@ The plugin is activated through URDF `<ros2_control>` blocks in `ar4_ros2_contro
   <joint name="J2">
     <param name="motor_id">1</param>
     <param name="steps_per_rev">200</param>
-    <param name="gear_ratio">40.0</param>
+    <param name="gear_ratio">100.0</param>
     <param name="microsteps">16</param>
     <param name="home_offset_rad">-0.7330</param>
     ...
@@ -235,7 +235,7 @@ The plugin is activated through URDF `<ros2_control>` blocks in `ar4_ros2_contro
     <param name="steps_per_rev">200</param>
     <param name="gear_ratio">50.0</param>
     <param name="microsteps">16</param>
-    <param name="home_offset_rad">-1.5533</param>
+    <param name="home_offset_rad">1.5533</param>
     ...
   </joint>
 

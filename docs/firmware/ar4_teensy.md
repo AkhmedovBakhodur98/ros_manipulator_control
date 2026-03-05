@@ -205,19 +205,19 @@ Includes `joints_config.h` at the end, so any file including `config.h` gets acc
 | `step_pin` | 4 | Step pulse output (PLACEHOLDER — set actual pins) |
 | `dir_pin` | 5 | Direction output (PLACEHOLDER — set actual pins) |
 | `limit_pin` | 31 | Limit switch input |
-| `dir_invert` | false | No DIR inversion |
+| `dir_invert` | true | DIR signal inverted to match URDF joint axis |
 | `max_speed` | 6000 steps/s | Motion speed |
 | `accel` | 3000 steps/s² | Acceleration |
 | `speed_fast` | 2000 steps/s | Homing fast approach |
 | `speed_slow` | 300 steps/s | Homing slow approach |
 | `backoff_steps` | 800 | Back-off after switch trigger |
-| `home_dir` | -1 | Direction toward limit switch (negative) |
-| `home_offset_steps` | -39556 | Steps from zero to -89° switch |
-| `limits.min_steps` | -39556 | -89° soft limit |
-| `limits.max_steps` | 23111 | +52° soft limit |
+| `home_dir` | +1 | Direction toward limit switch (positive, after dir invert) |
+| `home_offset_steps` | 39556 | Steps from zero to +89° switch |
+| `limits.min_steps` | -23111 | -52° soft limit |
+| `limits.max_steps` | 39556 | +89° soft limit |
 | `limits.enabled` | true | Soft limits active |
 | `steps_per_output_rev` | 160000 | 200 × 16 × 50 |
-| `start_position_steps` | -2800 | Position assumed on `START` command (-6.3°) |
+| `start_position_steps` | 2800 | Position assumed on `START` command (+6.3°) |
 
 **Current J4 configuration:**
 

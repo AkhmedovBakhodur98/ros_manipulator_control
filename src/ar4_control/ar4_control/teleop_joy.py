@@ -73,6 +73,7 @@ class TeleopJoy(Node):
         self.trajectory_client = ActionClient(
             self, FollowJointTrajectory, '/arm_controller/follow_joint_trajectory')
         self.joint_names = ['J1', 'J2', 'J3', 'J4', 'J5', 'J6']
+        self.trajectory_active = False
 
         self.get_logger().info(
             f'Teleop ready. Speed scale: {self.speed_scale:.1f}. '
@@ -103,6 +104,7 @@ class TeleopJoy(Node):
         # OPTIONS -> emergency stop
         if pressed(self.BTN_OPTIONS):
             self.get_logger().warn('EMERGENCY STOP')
+            self.trajectory_active = False
             stop_msg = Float64MultiArray()
             stop_msg.data = [0.0] * 6
             self.jog_pub.publish(stop_msg)
@@ -112,6 +114,11 @@ class TeleopJoy(Node):
         # SQUARE -> go to all zeros
         if pressed(self.BTN_SQUARE):
             self.go_to_zero()
+            self.prev_buttons = list(buttons)
+            return
+
+        # While trajectory is active, don't publish jog commands
+        if self.trajectory_active:
             self.prev_buttons = list(buttons)
             return
 
@@ -166,6 +173,7 @@ class TeleopJoy(Node):
         point.time_from_start = Duration(sec=5)
         goal.trajectory.points = [point]
 
+        self.trajectory_active = True
         self.get_logger().info('Going to all zeros...')
         future = self.trajectory_client.send_goal_async(goal)
         future.add_done_callback(self.go_to_zero_response)
@@ -174,12 +182,14 @@ class TeleopJoy(Node):
         goal_handle = future.result()
         if not goal_handle.accepted:
             self.get_logger().error('Go-to-zero goal rejected')
+            self.trajectory_active = False
             return
         self.get_logger().info('Go-to-zero goal accepted')
         result_future = goal_handle.get_result_async()
         result_future.add_done_callback(self.go_to_zero_done)
 
     def go_to_zero_done(self, future):
+        self.trajectory_active = False
         result = future.result()
         if result.status == 4:  # SUCCEEDED
             self.get_logger().info('Go-to-zero complete')
