@@ -10,7 +10,7 @@
 #endif
 
 // --- Number of joints (expand as joints are added) ---
-#define NUM_JOINTS 4
+#define NUM_JOINTS 6
 
 // Limit switch wiring: NC (normally closed) with INPUT_PULLUP
 // HIGH = switch triggered (contact open), LOW = switch not triggered

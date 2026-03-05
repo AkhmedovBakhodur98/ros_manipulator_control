@@ -1029,7 +1029,7 @@ This ensures:
 
 ### Purpose
 
-Standalone launch file for the AR4 6-DOF arm. Starts the AR4 with ros2_control and RViz visualization. Uses real hardware interface for J1+J2+J3 via Teensy 4.1, mock for J4-J6. Completely independent from the manipulator system — no action servers, no SCARA, no gripper.
+Standalone launch file for the AR4 6-DOF arm. Starts the AR4 with ros2_control and RViz visualization. All 6 joints (J1–J6) driven by real hardware via Teensy 4.1. Completely independent from the manipulator system — no action servers, no SCARA, no gripper.
 
 ### Launch Arguments
 
@@ -1071,7 +1071,7 @@ ros2 launch manipulator_bringup ar4_bringup.launch.py use_sim_time:=true
 
 4. Start controller_manager
    ├─► Loads ar4_controllers.yaml
-   └─► Loads ar4_hardware (mock_components/GenericSystem)
+   └─► Loads ar4_hardware (ar4_hardware_interface/Ar4System)
 
 5. Spawn Controllers (in order)
    ├─► joint_state_broadcaster (first)
@@ -1097,7 +1097,7 @@ ros2 launch manipulator_bringup ar4_bringup.launch.py use_sim_time:=true
 #### 2. controller_manager (ros2_control_node)
 
 **Package:** `controller_manager`
-**Purpose:** Manages AR4 controller lifecycle and mock hardware interface
+**Purpose:** Manages AR4 controller lifecycle and real hardware interface
 
 **Parameters:**
 - `robot_description` - URDF XML string (includes hardware interface)

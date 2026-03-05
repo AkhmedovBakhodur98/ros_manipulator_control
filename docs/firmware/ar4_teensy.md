@@ -4,7 +4,7 @@
 
 The `firmware/ar4_teensy/` directory contains a PlatformIO-based firmware for the Teensy 4.1 microcontroller that drives the AR4 arm's stepper motors. It provides a text-based serial protocol for position control, homing, and status queries. The firmware is designed to be **testable standalone** via a serial monitor before any ROS2 integration.
 
-Currently controls **J1** (base rotation), **J2** (shoulder), **J3** (elbow), and **J5** (wrist pitch). Additional joints are added by extending the `JOINTS[]` array in `joints_config.h`.
+Currently controls all 6 joints: **J1** (base rotation), **J2** (shoulder), **J3** (elbow), **J4** (wrist roll), **J5** (wrist pitch), and **J6** (wrist yaw).
 
 ---
 
@@ -14,17 +14,24 @@ Currently controls **J1** (base rotation), **J2** (shoulder), **J3** (elbow), an
 |-----------|-------|------|
 | Microcontroller | Teensy 4.1 | Step/dir pulse generation, protocol handling |
 | Driver | MKS SERVO42C | Closed-loop stepper driver (step/dir input, self-enabling) |
-| Motor | NEMA 17 | 200 full steps/rev |
+| Motor (J1,J3,J5) | NEMA 17 | 200 full steps/rev |
+| Motor (J2) | NEMA 23 | 200 full steps/rev |
+| Motor (J4) | NEMA 11 (28hs5006a4) | 200 full steps/rev |
+| Motor (J6) | NEMA 14 (14hs2812-pg19) | 200 full steps/rev |
 | Reducer (J1) | Sumtor 42XG10 | 40:1 planetary gearbox |
 | Reducer (J2) | Planetary | 100:1 planetary gearbox |
 | Reducer (J3) | Sumtor 42XG50 | 50:1 planetary gearbox |
+| Reducer (J4) | Planetary | 40:1 planetary gearbox |
 | Actuator (J5) | 42BYGH47-T8×8-200mm | NEMA 17 + T8 lead screw (8mm lead, 200mm travel) |
+| Driver (J6) | MKS 35D RS485 | Step/dir driver with 19:1 built-in planetary |
 | Limit switch | V-156-1C25 (Omron) | NC wiring (COM+NC terminals) |
 
 **Resolution (J1):** 200 steps/rev × 16 microsteps × 40:1 gear = **128 000 steps per output revolution** (0.0028125°/step).
 **Resolution (J2):** 200 steps/rev × 16 microsteps × 100:1 gear = **320 000 steps per output revolution**.
 **Resolution (J3):** 200 steps/rev × 16 microsteps × 50:1 gear = **160 000 steps per output revolution**.
+**Resolution (J4):** 200 steps/rev × 16 microsteps × 40:1 gear = **128 000 steps per output revolution**.
 **Resolution (J5):** 200 steps/rev × 16 microsteps = **3 200 steps per motor revolution** (no gear reducer — lead screw mechanism, effective ratio TBD via calibration).
+**Resolution (J6):** 200 steps/rev × 16 microsteps × 19:1 gear = **60 800 steps per output revolution**.
 
 ### MKS SERVO42C Wiring
 
@@ -56,6 +63,16 @@ Currently controls **J1** (base rotation), **J2** (shoulder), **J3** (elbow), an
 | EN | not connected |
 | GND | shared GND |
 
+**J4 (wrist roll — 40:1 planetary):**
+
+| MKS SERVO42C | Teensy 4.1 |
+|---|---|
+| STP | Pin 6 |
+| DIR | Pin 7 |
+| EN | not connected |
+| GND | shared GND |
+| LIMIT | Pin 26 |
+
 **J5 (wrist pitch — lead screw):**
 
 | MKS SERVO42C | Teensy 4.1 |
@@ -65,11 +82,21 @@ Currently controls **J1** (base rotation), **J2** (shoulder), **J3** (elbow), an
 | EN | not connected |
 | GND | shared GND |
 
+**J6 (wrist yaw — MKS 35D RS485 + 19:1 built-in planetary):**
+
+| MKS 35D RS485 | Teensy 4.1 |
+|---|---|
+| STP | Pin 10 |
+| DIR | Pin 11 |
+| EN | not connected |
+| GND | shared GND |
+| LIMIT | Pin 28 |
+
 **Important:** The MKS SERVO42C accepts 3.3V–24V on STP/DIR pins. Teensy 3.3V works directly. A 50µs minimum pulse width is set in firmware via `setMinPulseWidth(50)` — the default AccelStepper pulse (~1µs) is too short for the SERVO42C. Tested down from 500µs; 50µs allows speeds up to ~20,000 steps/s.
 
 ### Limit Switch Wiring (V-156-1C25)
 
-The switch has 3 terminals: COM, NC, NO. Use **COM → GND** and **NC → Teensy pin** with `INPUT_PULLUP`. Limit pins: J1=29, J2=30, J3=31, J5=27.
+The switch has 3 terminals: COM, NC, NO. Use **COM → GND** and **NC → Teensy pin** with `INPUT_PULLUP`. Limit pins: J1=29, J2=30, J3=31, J4=26, J5=27, J6=28.
 
 - Switch **not pressed** (NC closed): pin reads LOW (0)
 - Switch **pressed/triggered** (NC opens): pin reads HIGH (1) → `LIMIT_TRIGGERED`
@@ -115,7 +142,7 @@ Global constants only. All per-joint configuration has been moved to `joints_con
 | Constant | Value | Description |
 |----------|-------|-------------|
 | `SERIAL_BAUD` | 115200 | Serial baud rate |
-| `NUM_JOINTS` | 4 | Number of active joints (J1, J2, J3, J5) |
+| `NUM_JOINTS` | 6 | Number of active joints (J1–J6) |
 | `LIMIT_TRIGGERED` | HIGH | Limit switch triggered state (NC switch opens → pullup → HIGH) |
 
 Includes `joints_config.h` at the end, so any file including `config.h` gets access to the `JOINTS[]` array.
@@ -192,6 +219,27 @@ Includes `joints_config.h` at the end, so any file including `config.h` gets acc
 | `steps_per_output_rev` | 160000 | 200 × 16 × 50 |
 | `start_position_steps` | -2800 | Position assumed on `START` command (-6.3°) |
 
+**Current J4 configuration:**
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `step_pin` | 6 | Step pulse output |
+| `dir_pin` | 7 | Direction output |
+| `limit_pin` | 26 | Limit switch input |
+| `dir_invert` | false | No DIR inversion |
+| `max_speed` | 8000 steps/s | Motion speed |
+| `accel` | 4000 steps/s² | Acceleration |
+| `speed_fast` | 4000 steps/s | Homing fast approach |
+| `speed_slow` | 800 steps/s | Homing slow approach |
+| `backoff_steps` | 800 | Back-off after switch trigger |
+| `home_dir` | -1 | Direction toward limit switch (negative) |
+| `home_offset_steps` | -64000 | Steps from zero to switch (-180°) |
+| `limits.min_steps` | -64000 | PLACEHOLDER soft limit |
+| `limits.max_steps` | 64000 | PLACEHOLDER soft limit |
+| `limits.enabled` | true | Soft limits active |
+| `steps_per_output_rev` | 128000 | 200 × 16 × 40 |
+| `start_position_steps` | 0 | Position assumed on `START` command (0°) |
+
 **Current J5 configuration (PLACEHOLDER — calibrate with real hardware):**
 
 | Parameter | Value | Description |
@@ -211,9 +259,32 @@ Includes `joints_config.h` at the end, so any file including `config.h` gets acc
 | `limits.max_steps` | 5500 | PLACEHOLDER soft limit |
 | `limits.enabled` | true | Soft limits active |
 | `steps_per_output_rev` | 32000 | ~80mm travel on T8 lead screw (homing search distance) |
-| `start_position_steps` | -1600 | Position assumed on `START` command (-18°) |
+| `start_position_steps` | 1067 | Position assumed on `START` command (12°) |
 
 **Note:** J5 uses a T8×8mm lead screw linear actuator instead of a planetary gearbox. The `steps_per_output_rev` value is a placeholder — the actual steps-to-radians conversion must be calibrated empirically by measuring angular displacement for a known number of steps.
+
+**Current J6 configuration:**
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `step_pin` | 10 | Step pulse output |
+| `dir_pin` | 11 | Direction output |
+| `limit_pin` | 28 | Limit switch input |
+| `dir_invert` | false | No DIR inversion |
+| `max_speed` | 2000 steps/s | Motion speed |
+| `accel` | 1000 steps/s² | Acceleration |
+| `speed_fast` | 1000 steps/s | Homing fast approach |
+| `speed_slow` | 200 steps/s | Homing slow approach |
+| `backoff_steps` | 800 | Back-off after switch trigger |
+| `home_dir` | +1 | Direction toward limit switch (positive) |
+| `home_offset_steps` | 30400 | Steps from zero to switch (≈ +180°) |
+| `limits.min_steps` | -30400 | PLACEHOLDER soft limit |
+| `limits.max_steps` | 30400 | PLACEHOLDER soft limit |
+| `limits.enabled` | true | Soft limits active |
+| `steps_per_output_rev` | 60800 | 200 × 16 × 19 |
+| `start_position_steps` | 0 | Position assumed on `START` command (0°) |
+
+**Note:** J6 uses an MKS 35D RS485 driver with a built-in 19:1 planetary gearbox (not a separate MKS SERVO42C + external reducer).
 
 ### `include/protocol.h`
 
@@ -348,7 +419,7 @@ Outside of homing, the limit switch is monitored every loop iteration. The prote
 
 ### Software Position Limits
 
-For joints with `limits.enabled = true` (currently J2), software limits are enforced in two places:
+For joints with `limits.enabled = true` (J2, J3, J4, J5, J6), software limits are enforced in two places:
 
 1. **Command rejection** (`handleMoveTo`) — `MT` commands targeting a position outside `[min_steps, max_steps]` are rejected with `ERR 2 Position outside soft limits`.
 2. **Runtime monitoring** (`loop()`) — After homing, if a motor reaches or exceeds a soft limit boundary and is still moving further out of bounds, it is stopped instantly via `setCurrentPosition()`. Direction-aware: movement away from the exceeded limit is allowed. Prints `DBG SOFT_LIMIT motor=X`.
@@ -450,12 +521,9 @@ STOP
 
 ## Adding a New Joint
 
-To add a new joint (e.g., J4 or J6):
+All 6 joints (J1–J6) are configured in the `JOINTS[]` array. To modify a joint's parameters, edit the corresponding entry in `joints_config.h`.
 
-1. **`joints_config.h`** — Add a new entry to the `JOINTS[]` array with pins, motion, homing, and limits config. Update `NUM_JOINTS` in `config.h`.
-2. **No changes needed** in `motor.cpp`, `homing.cpp`, `protocol.cpp`, or `main.cpp` — they all iterate over `NUM_JOINTS` and read from `JOINTS[]`.
-
-**Note:** Firmware motor indices are contiguous (0=J1, 1=J2, 2=J3, 3=J5). The firmware doesn't know about ROS joint names — the URDF `motor_id` parameter maps ROS joints to firmware indices.
+**Firmware motor indices:** 0=J1, 1=J2, 2=J3, 3=J4, 4=J5, 5=J6. The firmware doesn't know about ROS joint names — the URDF `motor_id` parameter maps ROS joints to firmware indices.
 
 ---
 
@@ -464,6 +532,7 @@ To add a new joint (e.g., J4 or J6):
 - **Homing speeds not applied:** `speed_fast` and `speed_slow` in `JointHomingConfig` are defined but not yet used — homing runs at the motor's `max_speed`. Implement speed switching during homing phases.
 - **J3 pins are placeholders:** Step=4, Dir=5 are marked PLACEHOLDER in `joints_config.h`. Set actual pins before wiring J3.
 - **J5 calibration needed:** Offset, limits, and `steps_per_output_rev` are placeholders. Calibrate with real hardware.
+- **J6 speeds are conservative:** max_speed=2000, accel=1000 — tune after testing with real hardware.
 - **Debug output:** Verbose `DBG` serial messages are enabled. Consider adding a debug flag or removing before production.
 
 ---

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `ar4_hardware_interface` package provides a `ros2_control` `SystemInterface` plugin that communicates with a Teensy 4.1 microcontroller over serial to control real AR4 arm motors. Currently drives **J1** (base rotation), **J2** (shoulder), **J3** (elbow), and **J5** (wrist pitch), while J4 and J6 remain on `mock_components/GenericSystem`. Additional joints are added by moving their URDF `<joint>` block from the mock section to the real section.
+The `ar4_hardware_interface` package provides a `ros2_control` `SystemInterface` plugin that communicates with a Teensy 4.1 microcontroller over serial to control real AR4 arm motors. Drives all 6 joints: **J1** (base rotation), **J2** (shoulder), **J3** (elbow), **J4** (wrist roll), **J5** (wrist pitch), and **J6** (wrist yaw).
 
 **Key design:** Homing is **not** automatic. The arm starts reporting zero position for all joints. A calibration service (`/ar4_hardware/calibrate`) must be called explicitly to home the motors and enable position tracking.
 
@@ -11,21 +11,22 @@ The `ar4_hardware_interface` package provides a `ros2_control` `SystemInterface`
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────┐
-│                Controller Manager             │
-│  ┌──────────────────┐  ┌──────────────────┐  │
-│  │ ar4_real_hardware │  │ ar4_mock_hardware │  │
-│  │ (Ar4System)       │  │ (GenericSystem)   │  │
-│  │ J1+J2+J3+J5 real  │  │   J4+J6 mock      │  │
-│  └────────┬──────────┘  └──────────────────┘  │
-└───────────┼──────────────────────────────────┘
-            │ Serial (115200 baud)
-            ▼
-     ┌──────────────┐
-     │  Teensy 4.1   │──► J1: MKS SERVO42C ──► NEMA 17 + 40:1 reducer
-     │  Step/Dir x4  │──► J2: MKS SERVO42C ──► NEMA 23 + 100:1 reducer
-     │  Limit x4     │──► J3: MKS SERVO42C ──► NEMA 17 + 50:1 reducer
-     └──────────────┘    J5: MKS SERVO42C ──► NEMA 17 + T8 lead screw
+┌──────────────────────────────────────┐
+│          Controller Manager           │
+│  ┌──────────────────────────────┐    │
+│  │ ar4_real_hardware (Ar4System) │    │
+│  │ J1+J2+J3+J4+J5+J6 real       │    │
+│  └────────────┬─────────────────┘    │
+└───────────────┼──────────────────────┘
+                │ Serial (115200 baud)
+                ▼
+         ┌──────────────┐
+         │  Teensy 4.1   │──► J1: MKS SERVO42C ──► NEMA 17 + 40:1 reducer
+         │  Step/Dir x6  │──► J2: MKS SERVO42C ──► NEMA 23 + 100:1 reducer
+         │  Limit x6     │──► J3: MKS SERVO42C ──► NEMA 17 + 50:1 reducer
+         └──────────────┘──► J4: MKS SERVO42C ──► NEMA 11 + 40:1 reducer
+                          ──► J5: MKS SERVO42C ──► NEMA 17 + T8 lead screw
+                          ──► J6: MKS 35D RS485 ──► NEMA 14 + 19:1 built-in
 ```
 
 ---
@@ -223,6 +224,29 @@ The plugin is activated through URDF `<ros2_control>` blocks in `ar4_ros2_contro
     <param name="home_offset_rad">-1.5533</param>
     ...
   </joint>
+
+  <joint name="J4">
+    <param name="motor_id">3</param>
+    <param name="steps_per_rev">200</param>
+    <param name="gear_ratio">40.0</param>
+    <param name="microsteps">16</param>
+    <param name="home_offset_rad">-3.1416</param>
+    ...
+  </joint>
+
+  <joint name="J5">
+    <param name="motor_id">4</param>
+    ...
+  </joint>
+
+  <joint name="J6">
+    <param name="motor_id">5</param>
+    <param name="steps_per_rev">200</param>
+    <param name="gear_ratio">19.0</param>
+    <param name="microsteps">16</param>
+    <param name="home_offset_rad">3.1416</param>
+    ...
+  </joint>
 </ros2_control>
 ```
 
@@ -252,7 +276,7 @@ The plugin is activated through URDF `<ros2_control>` blocks in `ar4_ros2_contro
 - `read()` reports `position = 0.0`, `velocity = 0.0` for all joints
 - `write()` does not send any `MT` commands to Teensy
 - Teensy also rejects `MT` commands for unhomed motors (defense in depth)
-- Controllers can run but J1, J2, J3, J5 will not physically move
+- Controllers can run but no joints will physically move
 
 ### Calibration Procedure
 
@@ -328,8 +352,7 @@ ros2 launch manipulator_bringup ar4_bringup.launch.py baud_rate:=230400
 # List hardware components
 ros2 control list_hardware_components
 # Expected:
-#   ar4_real_hardware   [active]  ar4_hardware_interface/Ar4System   (J1, J2, J3, J5)
-#   ar4_mock_hardware   [active]  mock_components/GenericSystem      (J4, J6)
+#   ar4_real_hardware   [active]  ar4_hardware_interface/Ar4System   (J1–J6)
 
 # Monitor joint states
 ros2 topic echo /joint_states --once
@@ -353,29 +376,20 @@ ros2 action send_goal /arm_controller/follow_joint_trajectory \
 
 ---
 
-## Adding a New Joint
+## Joint Wiring Summary
 
-To move a joint from mock to real hardware (e.g., J4 or J6):
+All 6 joints are driven via real hardware. See `docs/firmware/ar4_teensy.md` for detailed per-joint wiring tables.
 
-1. **`ar4_ros2_control.urdf.xacro`** — Move the joint's `<joint>` block from `ar4_mock_hardware` to `ar4_real_hardware`, add motor params (`motor_id`, `steps_per_rev`, `gear_ratio`, `microsteps`, `home_offset_rad`).
-2. **Teensy firmware** — Increase `NUM_JOINTS`, add joint entry to `JOINTS[]` array in `joints_config.h`.
-3. **No changes** to `ar4_system.cpp`, `serial_port.cpp`, `teensy_protocol.cpp`, or launch files.
+| Joint | Driver | Motor | Reducer | Pins (step/dir/limit) |
+|-------|--------|-------|---------|----------------------|
+| J1 | MKS SERVO42C | NEMA 17 | 40:1 | 0 / 1 / 29 |
+| J2 | MKS SERVO42C | NEMA 23 | 100:1 | 2 / 3 / 30 |
+| J3 | MKS SERVO42C | NEMA 17 | 50:1 | 4 / 5 / 31 (PLACEHOLDER) |
+| J4 | MKS SERVO42C | NEMA 11 | 40:1 | 6 / 7 / 26 |
+| J5 | MKS SERVO42C | NEMA 17 | T8 lead screw | 8 / 9 / 27 |
+| J6 | MKS 35D RS485 | NEMA 14 | 19:1 built-in | 10 / 11 / 28 |
 
-### J5 Wiring (MKS SERVO42C + NEMA 17 + T8 lead screw)
-
-| MKS SERVO42C | Teensy 4.1 |
-|---|---|
-| STP | Pin 8 |
-| DIR | Pin 9 |
-| EN | not connected (self-enables) |
-| GND | shared GND |
-
-| Limit Switch | Teensy 4.1 |
-|---|---|
-| COM | GND |
-| NC | Pin 27 |
-
-**Note:** J5 uses a T8×8mm lead screw linear actuator instead of a gear reducer. The lead screw converts linear motion to wrist rotation via a linkage. The `gear_ratio` in URDF is a placeholder (1.0) — calibrate empirically after wiring.
+**Note:** J5 uses a T8×8mm lead screw linear actuator instead of a gear reducer. The `gear_ratio` in URDF is a placeholder (1.0) — calibrate empirically.
 
 ---
 

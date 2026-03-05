@@ -79,6 +79,17 @@ constexpr JointConfig JOINTS[NUM_JOINTS] = {
         .start_position_steps = -2800,  // -6.3°
     },
 
+    // J4: Wrist roll — NEMA 11 (28hs5006a4) + MKS SERVO42C + 40:1 planetary
+    {
+        .pins   = { .step_pin = 6, .dir_pin = 7, .limit_pin = 26, .dir_invert = false },
+        .motion = { .max_speed = 8000.0f, .accel = 4000.0f },
+        .homing = { .speed_fast = 4000.0f, .speed_slow = 800.0f,
+                    .backoff_steps = 800, .home_dir = -1, .home_offset_steps = -64000 },
+        .limits = { .min_steps = -64000, .max_steps = 64000, .enabled = true },  // PLACEHOLDER — calibrate
+        .steps_per_output_rev = 200L * 16 * 40,  // 128000
+        .start_position_steps = 0,
+    },
+
     // J5: Wrist pitch — NEMA 17 + MKS SERVO42C + T8 lead screw (no gear reducer)
     // Lead screw: T8×8mm lead, 200mm travel, linkage converts linear → rotation
     // Limit switch at +98° (positive end), range ±105°
@@ -91,5 +102,17 @@ constexpr JointConfig JOINTS[NUM_JOINTS] = {
         .limits = { .min_steps = -5500, .max_steps = 5500, .enabled = true },  // PLACEHOLDER — calibrate
         .steps_per_output_rev = 32000L,  // ~80mm travel on T8 lead screw (homing search distance)
         .start_position_steps = 1067,  // 12°
+    },
+
+    // J6: Wrist yaw — NEMA 14 (14hs2812-pg19) + MKS 35D RS485 + 19:1 built-in planetary
+    // PLACEHOLDER pins — set actual pins before wiring
+    {
+        .pins   = { .step_pin = 10, .dir_pin = 11, .limit_pin = 28, .dir_invert = false },
+        .motion = { .max_speed = 2000.0f, .accel = 1000.0f },
+        .homing = { .speed_fast = 1000.0f, .speed_slow = 200.0f,
+                    .backoff_steps = 800, .home_dir = 1, .home_offset_steps = 30400 },
+        .limits = { .min_steps = -30400, .max_steps = 30400, .enabled = true },  // PLACEHOLDER — calibrate
+        .steps_per_output_rev = 200L * 16 * 19,  // 60800
+        .start_position_steps = 0,
     },
 };

@@ -58,7 +58,7 @@ Modular 3-DOF SCARA arm (can be used standalone or attached to manipulator).
 - `urdf/` - SCARA robot description
 
 ### ar4_description
-Standalone 6-DOF AR4 arm (AR4 MK1). Not integrated with the manipulator system.
+Standalone 6-DOF AR4 arm (AR4 MK3). Not integrated with the manipulator system.
 - `config/` - Controller configuration (arm_controller for J1-J6)
 - `meshes/` - Visual and collision STL models (7 links)
 - `rviz/` - Pre-configured RViz visualization

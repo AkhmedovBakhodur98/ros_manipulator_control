@@ -11,7 +11,11 @@ ROS2 control system for an industrial manipulator with optional SCARA arm. Provi
 | `ros_control` | Unified control interface: joint movement, gripper, container operations, box extraction/return, medicine picking |
 | `scara_control` | SCARA arm control library (ScaraClient: IK/FK, linear motion, pick/place) |
 | `rest_api_bridge` | REST API layer for external WMS integration (FastAPI + JWT auth) |
+| `ar4_description` | AR4 6-DOF arm (standalone): URDF, meshes, controllers |
+| `ar4_hardware_interface` | ros2_control plugin for AR4 real hardware (Teensy 4.1 serial) |
+| `ar4_control` | AR4 arm control (placeholder) |
 | `manipulator_bringup` | Launch files for full system startup |
+| `firmware/ar4_teensy` | Teensy 4.1 firmware: stepper motor control, homing, serial protocol |
 
 ## Quick Start
 
@@ -149,9 +153,28 @@ src/
 │   ├── config/                    # rest_api_config.yaml (JWT, server settings)
 │   └── launch/                    # rest_api_server.launch.py
 │
+├── ar4_description/               # AR4 6-DOF arm (standalone)
+│   ├── urdf/                      # AR4 URDF/xacro (macro + ros2_control)
+│   ├── config/                    # ar4_controllers.yaml
+│   ├── meshes/                    # Visual and collision STL models
+│   └── rviz/                      # AR4 RViz config
+│
+├── ar4_hardware_interface/        # AR4 real hardware plugin
+│   ├── include/                   # Ar4System, SerialPort, TeensyProtocol
+│   └── src/                       # Plugin lifecycle, serial comms
+│
+├── ar4_control/                   # AR4 control (placeholder)
+│
 └── manipulator_bringup/           # System startup
     └── launch/
-        └── manipulator_bringup.launch.py
+        ├── manipulator_bringup.launch.py
+        ├── ar4_bringup.launch.py
+        └── ar4_display.launch.py
+
+firmware/
+└── ar4_teensy/                    # Teensy 4.1 firmware (PlatformIO)
+    ├── include/                   # config.h, joints_config.h, motor.h, homing.h, protocol.h
+    └── src/                       # main.cpp, motor.cpp, homing.cpp, protocol.cpp
 ```
 
 ## ROS2 Interfaces
@@ -195,16 +218,25 @@ External systems can access robot functionality via REST API:
 
 Full documentation is in the [docs/](docs/) directory:
 
-- [docs/README.md](docs/README.md) - Documentation index
+**Manipulator system:**
+- [docs/project_structure/overview.md](docs/project_structure/overview.md) - High-level project overview
+- [docs/manipulator_description/package_structure.md](docs/manipulator_description/package_structure.md) - Robot model details
+- [docs/manipulator_bringup/launch_files.md](docs/manipulator_bringup/launch_files.md) - Launch file reference
 - [docs/ros_control/package_structure.md](docs/ros_control/package_structure.md) - Control interface details
+
+**AR4 arm:**
+- [docs/firmware/ar4_teensy.md](docs/firmware/ar4_teensy.md) - Teensy firmware, serial protocol, pin assignments
+- [docs/ar4_hardware_interface/package_structure.md](docs/ar4_hardware_interface/package_structure.md) - ROS2 hardware interface, calibration
+- [docs/ar4_description/package_structure.md](docs/ar4_description/package_structure.md) - AR4 URDF, joint specs, usage
+
+**Action servers:**
 - [docs/ros_control/get_container_server.md](docs/ros_control/get_container_server.md) - Container pick operations
 - [docs/ros_control/place_container_server.md](docs/ros_control/place_container_server.md) - Container place operations
 - [docs/ros_control/navigate_to_address_server.md](docs/ros_control/navigate_to_address_server.md) - Address-based platform navigation
 - [docs/ros_control/extract_box_server.md](docs/ros_control/extract_box_server.md) - Box extraction from shelf
 - [docs/ros_control/return_box_server.md](docs/ros_control/return_box_server.md) - Box return to shelf
-- [docs/ros_control/pick_items_from_warehouse_action.md](docs/ros_control/pick_items_from_warehouse_action.md) - Medicine picking orchestrator design
-- [docs/ros_control/pick_items_from_warehouse_server.md](docs/ros_control/pick_items_from_warehouse_server.md) - Medicine picking server implementation
+- [docs/ros_control/pick_items_from_warehouse_server.md](docs/ros_control/pick_items_from_warehouse_server.md) - Medicine picking orchestrator
+
+**REST API:**
 - [docs/rest_api_bridge/package_structure.md](docs/rest_api_bridge/package_structure.md) - REST API complete reference
 - [docs/rest_api_bridge/API_CLIENT_GUIDE_RU.md](docs/rest_api_bridge/API_CLIENT_GUIDE_RU.md) - API client integration guide (Russian)
-- [docs/manipulator_bringup/launch_files.md](docs/manipulator_bringup/launch_files.md) - Launch file reference
-- [docs/manipulator_description/package_structure.md](docs/manipulator_description/package_structure.md) - Robot model details

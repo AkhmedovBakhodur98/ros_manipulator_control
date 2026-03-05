@@ -39,6 +39,9 @@ Thumbs.db
 # Colcon
 .colcon_defaults.yaml
 
+# PlatformIO
+**/.pio/
+
 # Claude
 .claude/
 .venv
