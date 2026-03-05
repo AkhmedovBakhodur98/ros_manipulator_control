@@ -1,0 +1,9 @@
+<library path="ar4_hardware_interface">
+  <class name="ar4_hardware_interface/Ar4System"
+         type="ar4_hardware_interface::Ar4System"
+         base_class_type="hardware_interface::SystemInterface">
+    <description>
+      Hardware interface for AR4 arm controlled via Teensy 4.1.
+    </description>
+  </class>
+</library>

@@ -32,6 +32,8 @@ def generate_launch_description():
     # Launch arguments
     use_sim_time = LaunchConfiguration('use_sim_time')
     use_rviz = LaunchConfiguration('rviz')
+    serial_port = LaunchConfiguration('serial_port')
+    baud_rate = LaunchConfiguration('baud_rate')
 
     # Declare arguments
     declare_use_sim_time = DeclareLaunchArgument(
@@ -46,11 +48,25 @@ def generate_launch_description():
         description='Launch RViz2 if true'
     )
 
+    declare_serial_port = DeclareLaunchArgument(
+        'serial_port',
+        default_value='/dev/ttyACM0',
+        description='Serial port for Teensy 4.1'
+    )
+
+    declare_baud_rate = DeclareLaunchArgument(
+        'baud_rate',
+        default_value='115200',
+        description='Baud rate for Teensy serial communication'
+    )
+
     # Process xacro file with ros2_control enabled
     robot_description_content = ParameterValue(
         Command([
             'xacro ', urdf_file,
-            ' use_ros2_control:=true'
+            ' use_ros2_control:=true',
+            ' serial_port:=', serial_port,
+            ' baud_rate:=', baud_rate
         ]),
         value_type=str
     )
@@ -117,6 +133,8 @@ def generate_launch_description():
         # Arguments
         declare_use_sim_time,
         declare_rviz,
+        declare_serial_port,
+        declare_baud_rate,
         # Nodes
         robot_state_publisher_node,
         controller_manager_node,

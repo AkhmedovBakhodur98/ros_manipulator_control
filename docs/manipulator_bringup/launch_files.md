@@ -1029,7 +1029,7 @@ This ensures:
 
 ### Purpose
 
-Standalone launch file for the AR4 6-DOF arm. Starts the AR4 with ros2_control (mock hardware) and RViz visualization. Completely independent from the manipulator system — no action servers, no SCARA, no gripper.
+Standalone launch file for the AR4 6-DOF arm. Starts the AR4 with ros2_control and RViz visualization. Uses real hardware interface for J1+J2+J3 via Teensy 4.1, mock for J4-J6. Completely independent from the manipulator system — no action servers, no SCARA, no gripper.
 
 ### Launch Arguments
 
@@ -1037,6 +1037,8 @@ Standalone launch file for the AR4 6-DOF arm. Starts the AR4 with ros2_control (
 |----------|------|---------|-------------|
 | `use_sim_time` | `bool` | `false` | Use simulation clock |
 | `rviz` | `bool` | `true` | Launch RViz2 with pre-configured AR4 visualization |
+| `serial_port` | `string` | `/dev/ttyACM0` | Teensy 4.1 serial port |
+| `baud_rate` | `string` | `115200` | Serial baud rate |
 
 ### Usage Examples
 
@@ -1187,6 +1189,57 @@ ros2 topic echo /joint_states
 #### Arm Not Visible in RViz
 
 **Solution:** Ensure RobotModel display is added with Description Topic set to `/robot_description`. The pre-configured `ar4.rviz` includes this automatically.
+
+---
+
+---
+
+## Launch File: `ar4_display.launch.py`
+
+### Purpose
+
+Display-only launch file for the AR4 6-DOF arm. Starts `robot_state_publisher` + `joint_state_publisher_gui` + RViz2 for manual joint manipulation via sliders. No ros2_control, no hardware connection.
+
+### Launch Arguments
+
+| Argument | Type | Default | Description |
+|----------|------|---------|-------------|
+| `rviz` | `bool` | `true` | Launch RViz2 with pre-configured AR4 visualization |
+
+### Usage Examples
+
+```bash
+# Display with joint sliders and RViz
+ros2 launch manipulator_bringup ar4_display.launch.py
+
+# Without RViz (GUI sliders only)
+ros2 launch manipulator_bringup ar4_display.launch.py rviz:=false
+```
+
+### Launch Process
+
+```
+1. Process URDF/Xacro
+   ├─► Load ar4_description/urdf/robot.urdf.xacro
+   └─► Disable ros2_control (use_ros2_control:=false)
+
+2. Start robot_state_publisher
+   └─► Publishes TF tree
+
+3. Start joint_state_publisher_gui
+   └─► Provides slider GUI to set joint positions
+
+4. Start RViz2 (if rviz:=true)
+   └─► Loads ar4.rviz config
+```
+
+### Nodes Started
+
+| Node | Package | Purpose |
+|------|---------|---------|
+| `robot_state_publisher` | `robot_state_publisher` | Publishes TF tree from URDF |
+| `joint_state_publisher_gui` | `joint_state_publisher_gui` | Slider GUI for manual joint control |
+| `rviz2` | `rviz2` | 3D visualization (conditional) |
 
 ---
 

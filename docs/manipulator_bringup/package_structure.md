@@ -21,7 +21,8 @@ src/manipulator_bringup/
 ├── package.xml                       # Package metadata and dependencies
 └── launch/
     ├── manipulator_bringup.launch.py # Main launch file (starts all manipulator infrastructure)
-    └── ar4_bringup.launch.py         # AR4 standalone bringup (ros2_control + RViz)
+    ├── ar4_bringup.launch.py         # AR4 standalone bringup (ros2_control + RViz)
+    └── ar4_display.launch.py         # AR4 display-only (joint_state_publisher_gui + RViz, no ros2_control)
 ```
 
 ---
@@ -103,17 +104,48 @@ ROS2 package manifest defining package metadata and dependencies.
 |----------|---------|-------------|
 | `use_sim_time` | `false` | Use simulation clock |
 | `rviz` | `true` | Launch RViz2 |
+| `serial_port` | `/dev/ttyACM0` | Teensy 4.1 serial port |
+| `baud_rate` | `115200` | Serial baud rate |
 
 **Usage:**
 ```bash
 # Full AR4 bringup with RViz
 ros2 launch manipulator_bringup ar4_bringup.launch.py
 
+# Custom serial port
+ros2 launch manipulator_bringup ar4_bringup.launch.py serial_port:=/dev/ttyUSB0
+
 # Without RViz
 ros2 launch manipulator_bringup ar4_bringup.launch.py rviz:=false
 ```
 
 **Note:** This launch file is completely independent from the manipulator system. No action servers, no SCARA integration, no gripper.
+
+### `launch/ar4_display.launch.py`
+
+**AR4 display-only launch file** — visualization with manual joint control via sliders. No ros2_control, no hardware.
+
+**What it does:**
+1. Processes AR4 xacro with `use_ros2_control:=false`
+2. Starts `robot_state_publisher`
+3. Starts `joint_state_publisher_gui` (slider GUI for manual joint control)
+4. Optionally launches RViz2
+
+**Launch arguments:**
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `rviz` | `true` | Launch RViz2 |
+
+**Usage:**
+```bash
+# Display with joint sliders and RViz
+ros2 launch manipulator_bringup ar4_display.launch.py
+
+# Without RViz (GUI sliders only)
+ros2 launch manipulator_bringup ar4_display.launch.py rviz:=false
+```
+
+**Note:** No controllers, no hardware interface, no serial connection. Just visualization with manual joint manipulation.
 
 ---
 

@@ -4,29 +4,32 @@
   <!--
     ros2_control hardware interface definition for AR4 6-DOF arm
 
-    Uses mock_components/GenericSystem for testing without real hardware.
+    Two hardware components:
+      1. ar4_real_hardware — real hardware via Teensy 4.1 (J1, J2, J3)
+      2. ar4_mock_hardware — mock for remaining joints (J4-J6)
 
-    Joints controlled (6):
-      - J1: Base rotation (Z-axis, ±170°)
-      - J2: Shoulder (Z-axis, -42° to 90°)
-      - J3: Elbow (Z-axis, -89° to 52°)
-      - J4: Wrist roll (Z-axis, ±165°)
-      - J5: Wrist pitch (X-axis, ±105°)
-      - J6: Wrist yaw (Z-axis, ±155°)
+    To add a real joint: move its <joint> block from mock to real section
+    and add motor_id, steps_per_rev, gear_ratio, microsteps, home_offset_rad params.
   -->
 
-  <xacro:macro name="ar4_ros2_control">
+  <xacro:macro name="ar4_ros2_control" params="serial_port:=/dev/ttyACM0 baud_rate:=115200">
 
-    <ros2_control name="ar4_hardware" type="system">
+    <!-- ============ Real hardware: J1+J2+J3+J5 via Teensy 4.1 ============ -->
+    <ros2_control name="ar4_real_hardware" type="system">
 
       <hardware>
-        <plugin>mock_components/GenericSystem</plugin>
-        <param name="mock_sensor_commands">true</param>
-        <param name="state_following_offset">0.0</param>
+        <plugin>ar4_hardware_interface/Ar4System</plugin>
+        <param name="serial_port">${serial_port}</param>
+        <param name="baud_rate">${baud_rate}</param>
       </hardware>
 
       <!-- J1: Base rotation -->
       <joint name="J1">
+        <param name="motor_id">0</param>
+        <param name="steps_per_rev">200</param>
+        <param name="gear_ratio">40.0</param>
+        <param name="microsteps">16</param>
+        <param name="home_offset_rad">2.967</param>
         <command_interface name="position">
           <param name="min">${radians(-170)}</param>
           <param name="max">${radians(170)}</param>
@@ -39,8 +42,13 @@
 
       <!-- J2: Shoulder -->
       <joint name="J2">
+        <param name="motor_id">1</param>
+        <param name="steps_per_rev">200</param>
+        <param name="gear_ratio">40.0</param>
+        <param name="microsteps">16</param>
+        <param name="home_offset_rad">-0.7330</param>
         <command_interface name="position">
-          <param name="min">${radians(-42)}</param>
+          <param name="min">${radians(-44)}</param>
           <param name="max">${radians(90)}</param>
         </command_interface>
         <state_interface name="position">
@@ -51,6 +59,11 @@
 
       <!-- J3: Elbow -->
       <joint name="J3">
+        <param name="motor_id">2</param>
+        <param name="steps_per_rev">200</param>
+        <param name="gear_ratio">50.0</param>
+        <param name="microsteps">16</param>
+        <param name="home_offset_rad">-1.5533</param>
         <command_interface name="position">
           <param name="min">${radians(-89)}</param>
           <param name="max">${radians(52)}</param>
@@ -61,11 +74,17 @@
         <state_interface name="velocity"/>
       </joint>
 
-      <!-- J4: Wrist roll -->
-      <joint name="J4">
+      <!-- J5: Wrist pitch — NEMA 17 + MKS SERVO42C + T8 lead screw (no gear reducer)
+           PLACEHOLDER gear_ratio — calibrate empirically with real hardware -->
+      <joint name="J5">
+        <param name="motor_id">3</param>
+        <param name="steps_per_rev">200</param>
+        <param name="gear_ratio">1.0</param>
+        <param name="microsteps">16</param>
+        <param name="home_offset_rad">1.7104</param>
         <command_interface name="position">
-          <param name="min">${radians(-165)}</param>
-          <param name="max">${radians(165)}</param>
+          <param name="min">${radians(-105)}</param>
+          <param name="max">${radians(105)}</param>
         </command_interface>
         <state_interface name="position">
           <param name="initial_value">0.0</param>
@@ -73,11 +92,22 @@
         <state_interface name="velocity"/>
       </joint>
 
-      <!-- J5: Wrist pitch -->
-      <joint name="J5">
+    </ros2_control>
+
+    <!-- ============ Mock hardware: J4+J6 ============ -->
+    <ros2_control name="ar4_mock_hardware" type="system">
+
+      <hardware>
+        <plugin>mock_components/GenericSystem</plugin>
+        <param name="mock_sensor_commands">true</param>
+        <param name="state_following_offset">0.0</param>
+      </hardware>
+
+      <!-- J4: Wrist roll -->
+      <joint name="J4">
         <command_interface name="position">
-          <param name="min">${radians(-105)}</param>
-          <param name="max">${radians(105)}</param>
+          <param name="min">${radians(-165)}</param>
+          <param name="max">${radians(165)}</param>
         </command_interface>
         <state_interface name="position">
           <param name="initial_value">0.0</param>

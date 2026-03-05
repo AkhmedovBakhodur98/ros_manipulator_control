@@ -55,7 +55,7 @@ ROS2 package manifest defining:
 - Dependencies:
   - Build: `ament_cmake`
   - Runtime: `urdf`, `xacro`, `robot_state_publisher`, `joint_state_publisher_gui`, `rviz2`
-  - Runtime: `controller_manager`, `joint_state_broadcaster`, `joint_trajectory_controller`
+  - Runtime: `ar4_hardware_interface`, `controller_manager`, `joint_state_broadcaster`, `joint_trajectory_controller`
 
 ---
 
@@ -128,17 +128,27 @@ STL mesh files for robot visualization and collision detection.
 #### `urdf/ar4_ros2_control.urdf.xacro`
 **ros2_control hardware interface** for AR4 joints.
 
-**Macro:** `ar4_ros2_control` (no parameters)
+**Macro:** `ar4_ros2_control` with parameters `serial_port` and `baud_rate`.
 
-**Defines:**
-- Hardware plugin: `mock_components/GenericSystem`
-- 6 joint interfaces (J1-J6): position command + position/velocity state
-- Joint limits hardcoded (matching ar4_macro.xacro values)
+**Defines two hardware components:**
+1. **`ar4_real_hardware`** — Real hardware via `ar4_hardware_interface/Ar4System` (Teensy 4.1 serial).
+   - Controls J1 (base rotation), J2 (shoulder), J3 (elbow), and J5 (wrist pitch) with motor parameters (motor_id, steps_per_rev, gear_ratio, microsteps, home_offset_rad).
+2. **`ar4_mock_hardware`** — Mock via `mock_components/GenericSystem`.
+   - Controls J4 and J6 (simulated).
+
+**Parameters:**
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `serial_port` | `/dev/ttyACM0` | Teensy 4.1 USB serial device |
+| `baud_rate` | `115200` | Serial baud rate |
+
+**Extensibility:** To add a real joint (e.g., J4), move its `<joint>` block from the mock section to the real section and add motor parameters.
 
 **Usage:**
 ```xml
 <xacro:include filename="$(find ar4_description)/urdf/ar4_ros2_control.urdf.xacro"/>
-<xacro:ar4_ros2_control/>
+<xacro:ar4_ros2_control serial_port="/dev/ttyACM0" baud_rate="115200"/>
 ```
 
 #### `urdf/robot.urdf.xacro`
@@ -150,11 +160,16 @@ Creates:
 - Optional ros2_control hardware interface (when `use_ros2_control:=true`)
 
 **Arguments:**
-- `use_ros2_control` (default: `true`) - Enable ros2_control
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `use_ros2_control` | `true` | Enable ros2_control hardware interfaces |
+| `serial_port` | `/dev/ttyACM0` | Serial port for Teensy 4.1 (passed to ros2_control macro) |
+| `baud_rate` | `115200` | Baud rate for Teensy serial (passed to ros2_control macro) |
 
 **Usage:**
 ```bash
-xacro robot.urdf.xacro use_ros2_control:=true > ar4.urdf
+xacro robot.urdf.xacro use_ros2_control:=true serial_port:=/dev/ttyACM0 baud_rate:=115200 > ar4.urdf
 ```
 
 ---
@@ -226,34 +241,44 @@ world
 
 ## Hardware Interface
 
-### Current: Mock Hardware
+### Hybrid Configuration: Real J1+J2+J3+J5 + Mock J4+J6
 
-The default hardware interface uses `mock_components/GenericSystem` for testing:
+The hardware interface is split across two `ros2_control` components:
 
+**1. `ar4_real_hardware`** — Real hardware via Teensy 4.1:
+```xml
+<hardware>
+  <plugin>ar4_hardware_interface/Ar4System</plugin>
+  <param name="serial_port">/dev/ttyACM0</param>
+  <param name="baud_rate">115200</param>
+</hardware>
+<!-- J1+J2+J3+J5 with motor_id, steps_per_rev, gear_ratio, microsteps, home_offset_rad -->
+```
+
+**Features:**
+- Controls physical motors via serial commands to Teensy 4.1
+- Requires explicit homing via `/ar4_hardware/calibrate` service
+- Reports real step-counted position after homing
+- MKS SERVO42C closed-loop drivers ensure no lost steps
+
+**2. `ar4_mock_hardware`** — Mock for remaining joints:
 ```xml
 <hardware>
   <plugin>mock_components/GenericSystem</plugin>
   <param name="mock_sensor_commands">true</param>
   <param name="state_following_offset">0.0</param>
 </hardware>
+<!-- J4+J6 simulated -->
 ```
 
 **Features:**
-- Simulates joint movement
-- Follows commanded positions
-- Publishes joint states
+- Simulates joint movement for J4 and J6
+- Follows commanded positions immediately
 - No real hardware required
 
-### Replacing with Real Hardware
+### Adding More Real Joints
 
-To use real hardware, replace the hardware plugin in `ar4_ros2_control.urdf.xacro`:
-
-```xml
-<hardware>
-  <plugin>your_hardware_package/YourHardwareInterface</plugin>
-  <!-- Add your hardware-specific parameters -->
-</hardware>
-```
+To move a joint (e.g., J4 or J6) from mock to real, move its `<joint>` block from the `ar4_mock_hardware` section to `ar4_real_hardware` in `ar4_ros2_control.urdf.xacro` and add motor parameters. See `docs/ar4_hardware_interface/package_structure.md` for details.
 
 ---
 
@@ -270,11 +295,30 @@ source install/setup.bash
 ### Launch with ros2_control (via manipulator_bringup)
 
 ```bash
-# Launch AR4 standalone with controllers and RViz
+# Launch AR4 standalone with controllers and RViz (default serial port)
 ros2 launch manipulator_bringup ar4_bringup.launch.py
+
+# Custom serial port
+ros2 launch manipulator_bringup ar4_bringup.launch.py serial_port:=/dev/ttyUSB0
 
 # Without RViz
 ros2 launch manipulator_bringup ar4_bringup.launch.py rviz:=false
+```
+
+**Launch arguments:**
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `use_sim_time` | `false` | Use simulation clock |
+| `rviz` | `true` | Launch RViz2 |
+| `serial_port` | `/dev/ttyACM0` | Teensy 4.1 serial port |
+| `baud_rate` | `115200` | Serial baud rate |
+
+### Calibrate (Required Before Moving J1+J2)
+
+```bash
+# Home all real motors (J1+J2+J3+J5, moves to limit switches, establishes position references)
+ros2 service call /ar4_hardware/calibrate std_srvs/srv/Trigger
 ```
 
 ### Control the Arm
@@ -355,6 +399,8 @@ ros2 control list_hardware_interfaces
 
 ## Related Documentation
 
+- **AR4 Hardware Interface:** `../ar4_hardware_interface/package_structure.md`
+- **Teensy 4.1 Firmware:** `../firmware/ar4_teensy.md`
 - **AR4 Bringup Launch:** `../manipulator_bringup/launch_files.md`
 - **AR4 Control Package:** `../ar4_control/package_structure.md`
 - **Project Overview:** `../project_structure/overview.md`

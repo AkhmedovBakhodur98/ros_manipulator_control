@@ -36,6 +36,10 @@ docs/
 │   ├── return_box_server.md               # ReturnBox server documentation
 │   ├── pick_items_from_warehouse_action.md # PickItemsFromWarehouse architectural design
 │   └── pick_items_from_warehouse_server.md # PickItemsFromWarehouse server documentation
+├── firmware/                               # Microcontroller firmware documentation
+│   └── ar4_teensy.md                      # Teensy 4.1 firmware (serial protocol, homing)
+├── ar4_hardware_interface/                # AR4 ros2_control hardware interface
+│   └── package_structure.md               # Package structure, URDF config, calibration
 ├── ar4_description/                       # AR4 arm documentation
 │   └── package_structure.md               # Package structure and files
 ├── ar4_control/                           # AR4 arm control documentation
@@ -64,7 +68,8 @@ docs/
 2. Read [manipulator_description/package_structure.md](manipulator_description/package_structure.md) to understand the main system
 3. Read [scara_description/package_structure.md](scara_description/package_structure.md) to learn about the SCARA module
 4. Read [ar4_description/package_structure.md](ar4_description/package_structure.md) to learn about the AR4 standalone arm
-5. Read [ros_control/package_structure.md](ros_control/package_structure.md) to understand the control interface
+5. Read [ar4_hardware_interface/package_structure.md](ar4_hardware_interface/package_structure.md) for AR4 real hardware control
+6. Read [ros_control/package_structure.md](ros_control/package_structure.md) to understand the control interface
 6. Read [manipulator_bringup/launch_files.md](manipulator_bringup/launch_files.md) to understand how everything starts
 
 **Configuration:**
@@ -245,6 +250,42 @@ docs/
 - ROS2 topics and actions reference
 
 **When to read:** When you need to understand the AR4 arm, launch it standalone, or send trajectory commands.
+
+---
+
+## Firmware Documentation
+
+### [ar4_teensy.md](firmware/ar4_teensy.md)
+**Purpose:** Complete documentation for the Teensy 4.1 firmware that drives AR4 stepper motors.
+
+**Contents:**
+- Hardware components (Teensy 4.1, MKS SERVO42C, NEMA 17, 10:1 reducer, limit switch)
+- Directory structure and file descriptions
+- Serial protocol reference (PING, EN, DIS, MT, GP, HOME, STOP)
+- Pin assignments and motor parameters
+- Non-blocking homing state machine (5-state sequence)
+- Standalone testing procedure (no ROS2 needed)
+- Guide for adding new joints
+
+**When to read:** When you need to flash, test, or modify the Teensy firmware, or understand the serial protocol.
+
+---
+
+## AR4 Hardware Interface Documentation
+
+### [package_structure.md](ar4_hardware_interface/package_structure.md)
+**Purpose:** Complete documentation for the `ar4_hardware_interface` ROS2 package — ros2_control plugin for real AR4 hardware.
+
+**Contents:**
+- Architecture diagram (Controller Manager → Serial → Teensy → Motor)
+- Package structure and file descriptions
+- SystemInterface lifecycle (on_init → on_configure → on_activate → read/write)
+- URDF configuration (hardware params, per-joint motor params)
+- Homing and calibration service (`/ar4_hardware/calibrate`)
+- Thread safety design (mutex-protected serial access)
+- Guide for adding new joints to real hardware
+
+**When to read:** When you need to understand how J1 real hardware control works, configure the serial connection, calibrate the arm, or add more real joints.
 
 ---
 
@@ -625,6 +666,11 @@ docs/
 - Read [ar4_description/package_structure.md](ar4_description/package_structure.md)
 - Run: `ros2 launch manipulator_bringup ar4_bringup.launch.py`
 
+**...control AR4 with real hardware (Teensy 4.1):**
+- Read [firmware/ar4_teensy.md](firmware/ar4_teensy.md) for flashing and standalone testing
+- Read [ar4_hardware_interface/package_structure.md](ar4_hardware_interface/package_structure.md) for ROS2 integration
+- Calibrate: `ros2 service call /ar4_hardware/calibrate std_srvs/srv/Trigger`
+
 **...see what's new:**
 - Read [scara_description/CHANGELOG.md](scara_description/CHANGELOG.md)
 
@@ -678,6 +724,17 @@ manipulator_description (robot model)
 
 ar4_description (standalone robot)
     └── AR4 arm (6-DOF) → standalone, not attached to manipulator
+
+ar4_hardware_interface (real motor control)
+    └── Ar4System plugin         ── ros2_control SystemInterface
+        ├── Serial → Teensy 4.1  ── Step/dir motor control
+        ├── J1 real, J2-J6 mock  ── Hybrid configuration
+        └── /ar4_hardware/calibrate ── Homing service
+
+firmware/ar4_teensy (Teensy 4.1 firmware)
+    └── PlatformIO project       ── AccelStepper + serial protocol
+        ├── Motor control         ── Position via step counting
+        └── Homing state machine  ── Limit switch reference
 
 ar4_control (placeholder for future AR4 control)
     └── Empty — ready for future development
@@ -750,6 +807,11 @@ ros2 launch scara_description display.launch.py
 ros2 launch manipulator_bringup ar4_bringup.launch.py
 ```
 
+**AR4 with custom serial port:**
+```bash
+ros2 launch manipulator_bringup ar4_bringup.launch.py serial_port:=/dev/ttyUSB0
+```
+
 ### Action Commands
 
 ```bash
@@ -775,6 +837,9 @@ ros2 action send_goal /PickItems ros_control/action/PickItemsFromWarehouse \
 ### Service Commands
 
 ```bash
+# Calibrate AR4 J1 (home to limit switch)
+ros2 service call /ar4_hardware/calibrate std_srvs/srv/Trigger
+
 # Open gripper
 ros2 service call /gripper/open std_srvs/srv/Trigger
 

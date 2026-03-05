@@ -12,6 +12,8 @@
 
   <!-- Arguments -->
   <xacro:arg name="use_ros2_control" default="true"/>
+  <xacro:arg name="serial_port" default="/dev/ttyACM0"/>
+  <xacro:arg name="baud_rate" default="115200"/>
 
   <!-- Include macros -->
   <xacro:include filename="$(find ar4_description)/urdf/ar4_macro.xacro"/>
@@ -27,7 +29,7 @@
 
   <!-- ros2_control hardware interface -->
   <xacro:if value="$(arg use_ros2_control)">
-    <xacro:ar4_ros2_control/>
+    <xacro:ar4_ros2_control serial_port="$(arg serial_port)" baud_rate="$(arg baud_rate)"/>
   </xacro:if>
 
 </robot>
