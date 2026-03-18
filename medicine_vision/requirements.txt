@@ -1,0 +1,9 @@
+ultralytics>=8.3.0
+labelme>=5.5.0
+paddlepaddle>=2.6.0
+paddleocr>=2.9.0
+rapidfuzz>=3.0.0
+scikit-image>=0.22.0
+imagehash>=4.3.0
+opencv-python-headless>=4.9.0
+Pillow>=10.0.0

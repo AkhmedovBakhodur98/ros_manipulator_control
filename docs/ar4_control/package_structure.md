@@ -59,11 +59,11 @@ ROS2 node that maps DualShock 4 (CUH-ZCT2E) inputs to joint jog velocities.
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `max_speed_j1` | 0.5 | Max J1 speed (rad/s) |
-| `max_speed_j2` | 0.5 | Max J2 speed (rad/s) |
-| `max_speed_j3` | 0.5 | Max J3 speed (rad/s) |
-| `max_speed_j4` | 0.5 | Max J4 speed (rad/s) |
-| `max_speed_j5` | 0.5 | Max J5 speed (rad/s) |
+| `max_speed_j1` | 0.69 | Max J1 speed (rad/s) |
+| `max_speed_j2` | 0.69 | Max J2 speed (rad/s) |
+| `max_speed_j3` | 0.47 | Max J3 speed (rad/s) |
+| `max_speed_j4` | 0.79 | Max J4 speed (rad/s) |
+| `max_speed_j5` | 3.14 | Max J5 speed (rad/s) |
 | `max_speed_j6` | 0.5 | Max J6 speed (rad/s) |
 
 **Action clients:**

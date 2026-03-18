@@ -1,0 +1,42 @@
+path: ../data
+train: images/train
+val: images/val
+
+names:
+  0: medicine_box
+  # Medicine name regions
+  1: analgin
+  2: dimedrol
+  3: droperidol
+  4: drotaverin_velfarm
+  5: ketorolak_velfarm
+  6: klofelin
+  7: magniy_sulfat
+  8: mexidol
+  9: metoklopramid
+  10: natriy_hlorid
+  11: papaverin
+  12: platifilin
+  13: spazmaten
+  14: furosemid
+  15: elzepam
+  16: enap_r
+  17: etamzilat
+  # Code/barcode regions
+  18: analgin_code
+  19: dimedrol_code
+  20: droperidol_code
+  21: drotaverin_velfarm_code
+  22: ketorolak_velfarm_code
+  23: klofelin_code
+  24: magniy_sulfat_code
+  25: mexidol_code
+  26: metoklopramid_code
+  27: natriy_hlorid_code
+  28: papaverin_code
+  29: platifilin_code
+  30: spazmaten_code
+  31: furosemid_code
+  32: elzepam_code
+  33: enap_r_code
+  34: etamzilat_code

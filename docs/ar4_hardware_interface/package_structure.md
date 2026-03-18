@@ -250,6 +250,10 @@ The plugin is activated through URDF `<ros2_control>` blocks in `ar4_ros2_contro
 
   <joint name="J5">
     <param name="motor_id">4</param>
+    <param name="steps_per_rev">200</param>
+    <param name="gear_ratio">10.0</param>
+    <param name="microsteps">16</param>
+    <param name="home_offset_rad">1.7104</param>
     ...
   </joint>
 
@@ -310,7 +314,7 @@ ros2 service call /ar4_hardware/calibrate std_srvs/srv/Trigger
 After successful calibration:
 - `read()` sends `GP` and converts step counts to radians
 - `write()` converts commanded radians to steps and sends `MT` commands
-- Position is referenced to the limit switch offset (e.g., +170° = 2.967 rad)
+- Position is converted directly from firmware step counts to radians (no offset applied in the hardware interface — the firmware handles position referencing via `home_offset_steps`)
 
 ---
 
@@ -429,7 +433,7 @@ All 6 joints are driven via real hardware. See `docs/firmware/ar4_teensy.md` for
 | J5 | MKS SERVO42C | NEMA 17 | T8 lead screw | 8 / 9 / 27 |
 | J6 | MKS 35D RS485 | NEMA 14 | 19:1 built-in | 10 / 11 / 28 |
 
-**Note:** J5 uses a T8×8mm lead screw linear actuator instead of a gear reducer. The `gear_ratio` in URDF is a placeholder (1.0) — calibrate empirically.
+**Note:** J5 uses a T8×8mm lead screw linear actuator instead of a gear reducer. The `gear_ratio` in URDF is set to 10.0 to map lead screw linear motion to angular (32000 steps/rev).
 
 ---
 

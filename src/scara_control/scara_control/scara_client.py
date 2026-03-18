@@ -639,7 +639,7 @@ class ScaraClient:
 
         # Z first
         if z is not None:
-            ok, msg = await self._send_z_trajectory(z, self._default_velocity)
+            ok, msg = await self._send_z_trajectory(z, velocity)
             if not ok:
                 return self._build_result(False, f'Z move failed: {msg}', t0)
 
@@ -741,7 +741,7 @@ class ScaraClient:
 
         # Z first
         if z is not None:
-            ok, msg = await self._send_z_trajectory(z, self._default_velocity)
+            ok, msg = await self._send_z_trajectory(z, velocity)
             if not ok:
                 return self._build_result(False, f'Z move failed: {msg}', t0)
 
@@ -909,8 +909,7 @@ class ScaraClient:
             if client is None:
                 return self._build_result(False, 'Tool service client not created', t0)
 
-            timeout = self._tool_cfg.get('settle_time', 5.0)
-            if not client.wait_for_service(timeout_sec=timeout):
+            if not client.wait_for_service(timeout_sec=5.0):
                 return self._build_result(False, 'Tool service not available', t0)
 
             resp = await client.call_async(Trigger.Request())

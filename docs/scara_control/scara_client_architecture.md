@@ -326,7 +326,7 @@ scara_client:
 
 ---
 
-### 3.6 Velocity Control
+### 3.7 Velocity Control
 
 All motion methods accept velocity parameters. Internally, velocity is handled differently depending on the motion type:
 
@@ -341,7 +341,7 @@ All motion methods accept velocity parameters. Internally, velocity is handled d
 
 ---
 
-### 3.7 State & Kinematics Queries
+### 3.8 State & Kinematics Queries
 
 Read-only methods for getting current arm state and computing kinematics without moving.
 
@@ -389,7 +389,7 @@ def has_z_axis(self) -> bool:
 def get_elbow_config(self) -> ElbowConfig:
     """
     Return current elbow configuration based on elbow joint angle.
-      ELBOW_UP   if theta2 > 0
+      ELBOW_UP   if theta2 >= 0
       ELBOW_DOWN if theta2 < 0
     """
 
@@ -415,7 +415,7 @@ The `move_to_point()` method's `elbow_up` parameter handles this. The caller can
 
 ---
 
-### 3.8 Home Position
+### 3.9 Home Position
 
 Return the SCARA arm to a configurable home pose.
 
@@ -443,7 +443,7 @@ scara_client:
 
 ---
 
-### 3.9 Tool Trigger (Picker Logic)
+### 3.10 Tool Trigger (Picker Logic)
 
 The SCARA arm may have an end-effector tool (gripper, suction, etc.) at the TCP. The client provides a generic tool interface that can be configured to work with whatever tool is mounted.
 
@@ -595,7 +595,6 @@ scara_client:
   # Linear motion parameters
   linear_motion:
     max_deviation: 0.005          # m (5mm) — max FK deviation from straight line
-    waypoint_count: 15            # default number of waypoints for move_linear
 
   # Default motion parameters
   defaults:

@@ -1,0 +1,27 @@
+# Virtual environment
+venv/
+
+# Pretrained weights (auto-downloaded by Ultralytics)
+yolo11n.pt
+
+# Training outputs
+runs/
+
+# Python
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+Thumbs.db
+.gradio/
+
+# PaddleOCR cache
+~/.paddleocr/
+
+# Trained weights (large binary files)
+weights/
+
+# Database (local data, not tracked)
+db/medicines.db
+db/reference_images/

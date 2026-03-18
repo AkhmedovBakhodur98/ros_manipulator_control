@@ -451,7 +451,7 @@ For joints with `limits.enabled = true` (J2, J3, J4, J5, J6), software limits ar
 
 J2 soft limits: -39111 steps (-44°) to 80000 steps (+90°). The limit switch at -42° provides physical protection near the lower end; the +90° upper end has no physical stop, so the soft limit is the only protection.
 
-J3 soft limits: -39556 steps (-89°) to 23111 steps (+52°). The limit switch at -89° provides physical protection near the lower end.
+J3 soft limits: -23111 steps (-52°) to 39556 steps (+89°). The limit switch at +89° provides physical protection near the upper end.
 
 ---
 

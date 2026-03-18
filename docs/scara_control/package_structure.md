@@ -104,7 +104,7 @@ Lightweight ROS2 node providing a distributed lock for SCARA mutual exclusion. P
 - `/scara_lock/acquire` (`std_srvs/srv/Trigger`) — returns `success=True` if lock granted, `success=False` if already held
 - `/scara_lock/release` (`std_srvs/srv/Trigger`) — releases the lock, returns `success=True`
 
-Simple boolean state (`_held`) with logging. Uses `ReentrantCallbackGroup` and `MultiThreadedExecutor`.
+Simple boolean state (`_held`) with logging. Uses `ReentrantCallbackGroup`.
 
 ---
 
