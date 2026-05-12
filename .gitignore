@@ -45,3 +45,18 @@ Thumbs.db
 # Claude
 .claude/
 .venv
+
+# ML / YOLO artifacts
+*.pt
+*.onnx
+*.engine
+*.torchscript
+*.tflite
+*.mlmodel
+*.pb
+*.cache
+runs/
+wandb/
+events.out.tfevents.*
+yolo*.pt
+weights/

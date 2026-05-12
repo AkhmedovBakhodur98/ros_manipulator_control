@@ -25,3 +25,8 @@ weights/
 # Database (local data, not tracked)
 db/medicines.db
 db/reference_images/
+
+# Dataset (regenerated from raw/ via scripts/split_dataset.py)
+data/raw/
+data/verify/
+data/images/
