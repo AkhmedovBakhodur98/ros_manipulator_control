@@ -6,13 +6,15 @@ ROS2 control system for manipulator robot with optional SCARA arm module.
 
 ```
 src/
-├── manipulator_bringup/      # Launch infrastructure
-├── manipulator_description/  # Main manipulator robot
-├── ros_control/              # Unified control interface
-├── scara_description/        # SCARA arm module (optional)
-├── scara_control/            # SCARA arm control library
-├── ar4_description/          # AR4 6-DOF arm (standalone)
-└── ar4_control/              # AR4 arm control (placeholder)
+├── manipulator_bringup/           # Launch infrastructure
+├── manipulator_description/       # Main manipulator robot
+├── manipulator_hardware_interface/# EtherCAT hardware interface (PLANNED, see docs)
+├── ros_control/                   # Unified control interface
+├── scara_description/             # SCARA arm module (optional)
+├── scara_control/                 # SCARA arm control library
+├── ar4_description/               # AR4 6-DOF arm (standalone)
+├── ar4_hardware_interface/        # AR4 Teensy-serial hardware interface
+└── ar4_control/                   # AR4 arm control (placeholder)
 ```
 
 ## Package Descriptions
@@ -66,6 +68,9 @@ Standalone 6-DOF AR4 arm (AR4 MK3). Not integrated with the manipulator system.
 
 ### ar4_control
 Minimal placeholder package for future AR4 arm control development. Follows `scara_control` pattern (`ament_python`), currently empty.
+
+### manipulator_hardware_interface (PLANNED — not yet implemented)
+EtherCAT hardware interface for the main manipulator (Z/X/A axes) and SCARA arm, driving StepperOnline A6-EC servos. Uses [ICube-Robotics/ethercat_driver_ros2](https://github.com/ICube-Robotics/ethercat_driver_ros2) `EcCiA402Drive` plugin via per-slave YAML configs — no custom C++ plugin. Replaces the Teensy-based path for production manipulator; AR4 keeps its own Teensy interface (`ar4_hardware_interface`). See `docs/manipulator_hardware_interface/` for the full plan.
 
 ## Key Configuration Files
 
