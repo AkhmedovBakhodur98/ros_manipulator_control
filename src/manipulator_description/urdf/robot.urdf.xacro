@@ -18,6 +18,15 @@
   <!-- Configuration arguments -->
   <xacro:arg name="use_scara" default="false"/>
   <xacro:arg name="use_ros2_control" default="true"/>
+  <!--
+    hardware: which ros2_control plugin to wire up.
+      mock           - mock_components/GenericSystem on every joint (default, no hardware)
+      ethercat_bench - single bench_joint on EthercatDriver+EcCiA402Drive (Stage 6 bring-up)
+    For the bench mode, slave_config_dir must point at the directory holding
+    the per-slave YAML (typically $(find manipulator_hardware_interface)/config/ethercat).
+  -->
+  <xacro:arg name="hardware" default="mock"/>
+  <xacro:arg name="slave_config_dir" default=""/>
 
   <!-- Load materials -->
   <xacro:include filename="$(find manipulator_description)/urdf/materials.xacro"/>
@@ -25,9 +34,10 @@
   <!-- Load manipulator -->
   <xacro:include filename="$(find manipulator_description)/urdf/manipulator/manipulator.urdf.xacro"/>
 
-  <!-- Load ros2_control hardware interface -->
+  <!-- Load ros2_control hardware interface (mock + bench variants) -->
   <xacro:include filename="$(find manipulator_description)/urdf/manipulator/manipulator_ros2_control.urdf.xacro"/>
-  
+  <xacro:include filename="$(find manipulator_description)/urdf/manipulator/manipulator_ethercat_test.urdf.xacro"/>
+
   <!-- Load SCARA ros2_control hardware interface (when SCARA is used) -->
   <xacro:include filename="$(find scara_description)/urdf/scara_ros2_control.urdf.xacro"/>
 
@@ -46,14 +56,19 @@
     <origin xyz="0 0 0.09" rpy="0 0 0"/>
   </joint>
 
-  <!-- ros2_control hardware interface (conditional) -->
+  <!-- ros2_control hardware interface (conditional, by hardware variant) -->
   <xacro:if value="$(arg use_ros2_control)">
-    <xacro:manipulator_ros2_control use_scara="$(arg use_scara)"/>
-    
-    <!-- SCARA ros2_control (only when SCARA is enabled) -->
-    <xacro:if value="$(arg use_scara)">
-      <xacro:scara_ros2_control
-        config_file="$(find scara_description)/config/scara_params.yaml"/>
+    <xacro:if value="${'$(arg hardware)' == 'mock'}">
+      <xacro:manipulator_ros2_control use_scara="$(arg use_scara)"/>
+      <!-- SCARA ros2_control (only when SCARA is enabled) -->
+      <xacro:if value="$(arg use_scara)">
+        <xacro:scara_ros2_control
+          config_file="$(find scara_description)/config/scara_params.yaml"/>
+      </xacro:if>
+    </xacro:if>
+    <xacro:if value="${'$(arg hardware)' == 'ethercat_bench'}">
+      <xacro:manipulator_ethercat_bench
+        slave_config_dir="$(arg slave_config_dir)"/>
     </xacro:if>
   </xacro:if>
 

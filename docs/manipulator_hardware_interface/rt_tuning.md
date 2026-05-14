@@ -175,10 +175,12 @@ If you raise the systemd ceiling to 99, any buggy userspace loop running at prio
 When launching the controller_manager:
 
 ```bash
-chrt -f 80 ros2 launch manipulator_hardware_interface ethercat_master.launch.py
+chrt -f 80 ros2 launch manipulator_bringup ethercat_bench.launch.py
 ```
 
-Or, better, set `SCHED_FIFO` from inside the launch via `Node(prefix='chrt -f 80')`.
+Or, better, set `SCHED_FIFO` from inside the launch via `Node(prefix='chrt -f 80')` (untested — Stage 6.5 follow-up).
+
+**Verified 2026-05-14 (Stage 6 exit criterion soak):** with `chrt -f 80` on the launch *and* the `ethercat-irq-pin.service` from above active, a 600-second steady-state run logged **zero** `Working counter` / `UNMATCHED` / `SKIPPED` / `TIMED OUT` events. **Do NOT add `taskset -c 1`** to the wrapper — pinning the entire ros2_control_node process tree to CPU 1 forces ROS callbacks to compete with the cyclic thread on the same core and produces 2–4 ms PDO read times. The right shape is: NIC IRQ + RT cyclic thread on CPU 1 (cache co-located), ROS callbacks left for the scheduler on CPU 0.
 
 The EtherCAT kernel thread (`ec_master_0`) is already at SCHED_FIFO 80 from IgH defaults — verify with `ps -eLo pid,tid,class,rtprio,comm | grep ec_master`.
 

@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>manipulator_hardware_interface</name>
+  <version>0.1.0</version>
+  <description>EtherCAT (IgH + ICube) hardware interface configs and launch for the StepperOnline A6-EC servo chain. Stage 6: single-slave bring-up under ros2_control.</description>
+  <maintainer email="fedoseevph1@gmail.com">bakhodur</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <!-- Runtime deps reflect what the configs reference at launch time;
+       launch wiring lives in manipulator_bringup. -->
+  <exec_depend>ethercat_driver</exec_depend>
+  <exec_depend>ethercat_generic_cia402_drive</exec_depend>
+  <exec_depend>joint_state_broadcaster</exec_depend>
+  <exec_depend>joint_trajectory_controller</exec_depend>
+  <exec_depend>forward_command_controller</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

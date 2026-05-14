@@ -27,14 +27,15 @@ src/manipulator_description/
 ├── rviz/
 │   └── view_robot.rviz               # RViz configuration file
 └── urdf/
-    ├── robot.urdf.xacro              # Main robot assembly file
+    ├── robot.urdf.xacro              # Main robot assembly file (hardware-variant selector)
     ├── materials.xacro               # Material/color definitions
     └── manipulator/
-        ├── manipulator.urdf.xacro           # Manipulator top-level assembly
-        ├── manipulator_base.urdf.xacro      # Base assembly (base_link + main_frame)
-        ├── manipulator_selector.urdf.xacro  # Selector assembly (selector_frame + jaws)
-        ├── manipulator_picker.urdf.xacro    # Picker assembly (picker_frame)
-        └── manipulator_ros2_control.urdf.xacro  # ros2_control hardware interface
+        ├── manipulator.urdf.xacro                  # Manipulator top-level assembly
+        ├── manipulator_base.urdf.xacro             # Base assembly (base_link + main_frame)
+        ├── manipulator_selector.urdf.xacro         # Selector assembly (selector_frame + jaws)
+        ├── manipulator_picker.urdf.xacro           # Picker assembly (picker_frame)
+        ├── manipulator_ros2_control.urdf.xacro     # ros2_control hardware interface (mock_components/GenericSystem)
+        └── manipulator_ethercat_test.urdf.xacro    # ros2_control bench variant — single bench_joint on EthercatDriver+EcCiA402Drive (Stage 6)
 ```
 
 ---
@@ -253,6 +254,15 @@ Pre-configured RViz2 layout with:
 </robot>
 ```
 
+**Launch arguments:**
+
+| Arg | Default | Effect |
+|---|---|---|
+| `use_scara` | `false` | Append SCARA arm to picker_frame (mock branch only). |
+| `use_ros2_control` | `true` | Emit `<ros2_control>` block. |
+| `hardware` | `mock` | Which `<ros2_control>` macro to expand: `mock` → `manipulator_ros2_control` (5+3 joints on `mock_components/GenericSystem`); `ethercat_bench` → `manipulator_ethercat_bench` (single `bench_joint` on real EtherCAT, Stage 6 bring-up). |
+| `slave_config_dir` | `""` | Required when `hardware:=ethercat_bench`. Directory holding per-slave PDO YAML — passed at launch time (see `manipulator_bringup/launch/ethercat_bench.launch.py`) to avoid `manipulator_description` reverse-depending on `manipulator_hardware_interface`. |
+
 #### `urdf/materials.xacro`
 Material definitions for visualization colors:
 - `manipulator_dark_grey`
@@ -317,6 +327,22 @@ Replace the mock plugin with your custom hardware interface:
 <!-- To your hardware interface -->
 <plugin>your_package/YourHardwareInterface</plugin>
 ```
+
+#### `urdf/manipulator/manipulator_ethercat_test.urdf.xacro`
+**Bench-variant `<ros2_control>` macro** for Stage 6 single-slave EtherCAT bring-up. Selected by `robot.urdf.xacro` when `hardware:=ethercat_bench`.
+
+**Hardware Plugin:** `ethercat_driver/EthercatDriver` (ICube `ethercat_driver_ros2`, jazzy branch).
+
+**Macro:** `manipulator_ethercat_bench(slave_config_dir)`. Emits:
+
+- A standalone `world → bench_link` revolute joint named `bench_joint` (limits in raw 17-bit encoder counts: ±400 000 ≈ ±3 motor revolutions). The geometric pair is mandatory — `ros2_control_node` aborts with `Joint 'bench_joint' not found in URDF` when a `<joint>` declared inside `<ros2_control>` has no counterpart in the URDF tree.
+- A `<ros2_control>` system component `manipulator_ec_bench` with `master_id=0`, `control_frequency=1000` and one `<ec_module name="A6_200EC">` (`ethercat_generic_plugins/EcCiA402Drive`, alias 6, position 0, mode of operation 8 / CSP, `slave_config=${slave_config_dir}/a6_200ec_slave.yaml`).
+
+**Joint interfaces:** `command_interface=position`, `state_interface=position,velocity`. Values are raw encoder counts; no scaling factor is applied in the slave YAML for Stage 6 (revisit at Stage 7 when joint→drive mapping is finalised).
+
+**Coexistence with manipulator/SCARA geometry:** `bench_joint` is a separate branch off `world`, parallel to `world_to_base → base_link → ...`. The full manipulator geometry is still rendered (rviz, robot_state_publisher work as usual), but only `bench_joint` participates in `ros2_control` updates.
+
+See `docs/manipulator_hardware_interface/bringup.md` Stage 6 for the bring-up procedure and current verification status.
 
 ---
 

@@ -113,22 +113,61 @@ Sub-checklist:
 
 **Exit criterion met:** all packages build, link against `/usr/local/lib/libethercat.so.1`, and `ros2 pkg prefix ethercat_driver` resolves.
 
-## Stage 6 — Single-Slave ROS Bringup
+## Stage 6 — Single-Slave ROS Bringup ✅ closed (2026-05-14 on `grenka`)
 
-1. Write `config/ethercat/a6_750ec_slave.yaml` from [a6_pdo_mapping.md](a6_pdo_mapping.md) sketch
-2. Write a minimal `config/ros2_control_test.yaml` exposing only one joint
-3. Launch via `manipulator_hardware_interface/launch/ethercat_master.launch.py`
-4. Check:
+**What landed (2026-05-14):**
+
+- New package `manipulator_hardware_interface` (ament_cmake, no C++) with:
+  - `config/ethercat/a6_200ec_slave.yaml` — 1:1 translation of csp_smoke PDO/DC config (variable 0x1600/0x1A00 with explicit 0x6060/0x6061 remap, AssignActivate=0x300, `auto_fault_reset: true` so a stale `0x603F=0x8700` from a prior run does not block first OperationEnabled).
+  - `config/ethercat_bench_controllers.yaml` — `controller_manager` at 1000 Hz, `joint_state_broadcaster`, `forward_position_controller` (active), `bench_trajectory_controller` (inactive).
+- New xacro in `manipulator_description/urdf/manipulator/manipulator_ethercat_test.urdf.xacro` (macro `manipulator_ethercat_bench`) — one `bench_joint` paired with a tiny `world → bench_link` tree, `<ros2_control>` block with `EthercatDriver` + `EcCiA402Drive` (alias 6, position 0, mode 8 / CSP). `bench_joint` MUST exist as a geometric `<joint>` in the URDF — `ros2_control_node` aborts with `Joint 'bench_joint' not found in URDF` if you try to declare it only inside `<ros2_control>`.
+- `robot.urdf.xacro` gained a `hardware:=mock|ethercat_bench` arg + `slave_config_dir:=...` arg; mock branch is unchanged. `slave_config_dir` is supplied at launch time (avoids `manipulator_description` reverse-depending on `manipulator_hardware_interface`).
+- New launch in `manipulator_bringup/launch/ethercat_bench.launch.py` (a thin one-component launch — does NOT pull in the production action-server zoo from `manipulator_bringup.launch.py`).
+
+**Functional verification (2026-05-14):**
+
+| Check | Result |
+|---|---|
+| `ros2 control list_hardware_components` | `manipulator_ec_bench` `state=active`, read/write 1000 Hz |
+| `ros2 control list_controllers` | `joint_state_broadcaster` active, `forward_position_controller` active, `bench_trajectory_controller` inactive |
+| `ethercat slaves` | A6-200EC alias 6 → **OP** (A6-750EC alias 4 stays PREOP — not in our YAML, master ignores it) |
+| `/joint_states` | bench_joint position publishes at 100 Hz from `joint_state_broadcaster` |
+| FPC command (target = current + 30000 counts ≈ 0.23 motor rev) | Actual position arrived at target with **1 count** following error — CSP tracking nominal |
+
+**Exit criterion verification (10-minute soak, 2026-05-14):**
+
+| Phase | Window | Working counter | UNMATCHED | SKIPPED | TIMED OUT | ros2_control overruns |
+|---|---|---|---|---|---|---|
+| Baseline (no RT tuning) | ~10 s steady-state | ~10–30 / s | ~10–25 / s | ~3–8 / s | occasional | 0 |
+| `chrt -f 80` only | 44 s steady-state | 4 | 3 | 3 | **1** | 0 |
+| `chrt -f 80` + IRQ pin to CPU 1 | 60 s idle + 15 s active (5 FPC steps) | 0 | 0 | 0 | 0 | 0 |
+| **`chrt -f 80` + IRQ pin to CPU 1** | **600 s idle (exit criterion soak)** | **0** | **0** | **0** | **0** | **0** |
+
+Slave finished the 10-minute soak still in **OP**. FPC tracking error stayed at ≤ 1 count throughout the active phase (target 167130 → actual 167129).
+
+**Bring-up recipe (post-Stage 6):**
 
 ```bash
-ros2 control list_hardware_components   # Should be active
-ros2 topic echo /joint_states --once     # Should report current position
-ethercat slaves                          # Slave in OP
+# One-time per boot (or via systemd-unit; see Stage 6.5 below):
+sudo bash -c 'echo 2 > /proc/irq/56/smp_affinity'   # NIC IRQ → CPU 1 (isolated)
+
+# Launch:
+chrt -f 80 ros2 launch manipulator_bringup ethercat_bench.launch.py
 ```
 
-5. Drive the joint with a `JointTrajectoryController` slow trajectory
+`chrt -f 80` raises the SCHED_FIFO priority of the `ros2_control_node` worker from the controller_manager default of 50; the system limit is 95 (set by `system.conf.d/99-ethercat-rt.conf` from Stage 4). `taskset -c 1` was tried but **made things worse** — pinning the whole process tree to CPU 1 forced ROS callbacks to compete with the RT thread on the same core, producing 2–4 ms PDO read times and overruns. Letting the scheduler keep ROS callbacks on CPU 0 (NIC IRQ co-located with the RT-thread cache on CPU 1 is what matters) is the right shape.
 
-**Exit criterion:** joint moves under ros2_control, no SafeOP drops over 10 min.
+## Stage 6.5 — RT-tuning persistence ⚠️ partially open
+
+Stage 6 verified the recipe works in a one-off shell; Stage 6.5 makes it survive a reboot and a `systemctl restart`.
+
+**Open work:**
+
+1. Persist the IRQ pin. Today `/proc/irq/56/smp_affinity` resets to `00000001` on every boot — needs either a one-shot systemd unit (`After=ethercat.service`, runs the `echo 2 > ...`), an `irqbalance` ban-list entry, or a kernel cmdline `irqaffinity=` adjustment that allows CPU 1.
+2. Decide whether to wrap the launch in a `manipulator-ec-bench.service` systemd unit with `CPUSchedulingPolicy=fifo`, `CPUSchedulingPriority=80`, `LimitRTPRIO=95`, `LimitMEMLOCK=infinity`. Avoids needing `chrt` in the user's command line; also gives a clean `journalctl -u` log path.
+3. (Stretch) investigate the `controller_manager` `thread_priority` ROS parameter — if it works, we drop the `chrt` wrapper entirely.
+
+These are configuration items, not new development; deferred until Stage 7 multi-slave bring-up tells us whether the 1-axis recipe scales.
 
 ## Stage 7 — Full Chain Bringup
 

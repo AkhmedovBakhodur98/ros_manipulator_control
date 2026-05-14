@@ -14,6 +14,7 @@
   <depend>scara_description</depend>
   <depend>ar4_description</depend>
   <depend>ros_control</depend>
+  <depend>manipulator_hardware_interface</depend>
 
   <!-- Runtime dependencies -->
   <exec_depend>controller_manager</exec_depend>

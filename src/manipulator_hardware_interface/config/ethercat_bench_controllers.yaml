@@ -1,0 +1,64 @@
+# Controllers for Stage 6 single-slave EtherCAT bench (A6-200EC at alias 6).
+#
+# bench_joint values are RAW encoder counts (no scaling in slave YAML for
+# Stage 6) — 17-bit absolute = 131072 counts/rev. Sample numbers:
+#   1 motor revolution = 131072 counts
+#   sine_smoke amplitude in csp_smoke = 50000 counts ≈ 0.38 rev
+#
+# update_rate must equal the master cycle (control_frequency in URDF =
+# 1000 Hz, SYNC0 1 ms).
+
+controller_manager:
+  ros__parameters:
+    update_rate: 1000  # Hz
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    forward_position_controller:
+      type: forward_command_controller/ForwardCommandController
+
+    bench_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+
+joint_state_broadcaster:
+  ros__parameters:
+    joints:
+      - bench_joint
+
+
+# Active by default. Send a single position with:
+#   ros2 topic pub --once /forward_position_controller/commands \
+#     std_msgs/msg/Float64MultiArray "{data: [50000.0]}"
+forward_position_controller:
+  ros__parameters:
+    joints:
+      - bench_joint
+    interface_name: position
+
+
+# Inactive by default — switch in via:
+#   ros2 control switch_controllers \
+#     --deactivate forward_position_controller \
+#     --activate bench_trajectory_controller
+# Then send slow trajectory via /bench_trajectory_controller/follow_joint_trajectory.
+bench_trajectory_controller:
+  ros__parameters:
+    joints:
+      - bench_joint
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    state_publish_rate: 100.0
+    action_monitor_rate: 20.0
+    allow_partial_joints_goal: false
+    # bench_joint is not in the geometric URDF, so URDF joint_limits are
+    # absent — disable enforcement and rely on drive-side following error
+    # window (0x6065 = 429,483 counts factory default, see
+    # docs/.../a6_pdo_mapping.md §Verified Operational Parameters).
+    constraints:
+      stopped_velocity_tolerance: 0.0
+      goal_time: 0.0

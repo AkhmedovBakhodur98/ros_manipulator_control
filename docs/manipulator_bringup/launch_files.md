@@ -1245,7 +1245,8 @@ ros2 launch manipulator_bringup ar4_display.launch.py rviz:=false
 
 ## Related Documentation
 
-- **Package Structure**: [package_structure.md](package_structure.md) - Overall package architecture
+- **Package Structure**: [package_structure.md](package_structure.md) - Overall package architecture, plus docs for `ethercat_bench.launch.py` (Stage 6 EtherCAT bring-up) and the AR4 launch files.
+- **EtherCAT Bring-up Procedure**: `../manipulator_hardware_interface/bringup.md` — Stage-by-stage record for the EtherCAT data plane that `ethercat_bench.launch.py` exercises.
 - **Manipulator Controllers**: `../manipulator_description/package_structure.md`
 - **SCARA Controllers**: `../scara_description/ros2_control.md`
 - **AR4 Description**: `../ar4_description/package_structure.md`

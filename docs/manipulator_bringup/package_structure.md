@@ -20,9 +20,10 @@ src/manipulator_bringup/
 ├── CMakeLists.txt                    # Build configuration
 ├── package.xml                       # Package metadata and dependencies
 └── launch/
-    ├── manipulator_bringup.launch.py # Main launch file (starts all manipulator infrastructure)
+    ├── manipulator_bringup.launch.py # Main launch file (starts all manipulator infrastructure on mock hardware)
     ├── ar4_bringup.launch.py         # AR4 standalone bringup (ros2_control + RViz)
-    └── ar4_display.launch.py         # AR4 display-only (joint_state_publisher_gui + RViz, no ros2_control)
+    ├── ar4_display.launch.py         # AR4 display-only (joint_state_publisher_gui + RViz, no ros2_control)
+    └── ethercat_bench.launch.py      # Stage 6 EtherCAT single-slave bring-up (real A6-200EC, no mock, no action servers)
 ```
 
 ---
@@ -59,6 +60,7 @@ ROS2 package manifest defining package metadata and dependencies.
 | **Runtime** | `scara_description` | SCARA arm description (optional) |
 | **Runtime** | `ar4_description` | AR4 arm description (standalone) |
 | **Runtime** | `ros_control` | Unified control interface |
+| **Runtime** | `manipulator_hardware_interface` | EtherCAT slave PDO YAML and bench controllers (used by `ethercat_bench.launch.py`) |
 | **Runtime** | `controller_manager` | Controller lifecycle management |
 | **Runtime** | `robot_state_publisher` | TF tree publishing |
 | **Runtime** | `rviz2` | Visualization (optional) |
@@ -146,6 +148,43 @@ ros2 launch manipulator_bringup ar4_display.launch.py rviz:=false
 ```
 
 **Note:** No controllers, no hardware interface, no serial connection. Just visualization with manual joint manipulation.
+
+### `launch/ethercat_bench.launch.py`
+
+**Stage 6 single-slave EtherCAT bring-up.** Brings up the A6-200EC at EEPROM alias 6 (the bench drive with motor connected) under `ros2_control` and the ICube `ethercat_driver_ros2` stack. Intentionally minimal — no `move_joint_group_server`, no `gripper_service`, no SCARA, no RViz — purely a smoke / verification path for the EtherCAT data plane.
+
+**What it does:**
+1. Renders `manipulator_description/urdf/robot.urdf.xacro` with `hardware:=ethercat_bench` and `slave_config_dir:=$(find manipulator_hardware_interface)/config/ethercat`. The expanded URDF carries the full manipulator geometry plus a tiny `bench_joint` branch off `world`.
+2. Starts `robot_state_publisher` (so `/robot_description` is available for tooling).
+3. Starts `controller_manager` (`ros2_control_node`) with `manipulator_hardware_interface/config/ethercat_bench_controllers.yaml` (1000 Hz update rate, three controllers).
+4. Spawns `joint_state_broadcaster` first.
+5. After the broadcaster spawner exits, spawns `forward_position_controller` (active) and `bench_trajectory_controller` (loaded **inactive**, switch in via `ros2 control switch_controllers`).
+
+**No launch arguments** — the configuration is hard-coded for the bench (alias 6, mode 8 / CSP, 1 kHz). Stage 7 will introduce a multi-slave variant with arguments.
+
+**Usage:**
+
+```bash
+# Bench bring-up (master must be 'active', slave at alias 6 in PREOP)
+ros2 launch manipulator_bringup ethercat_bench.launch.py
+
+# Verification:
+ros2 control list_hardware_components   # manipulator_ec_bench → state=active
+ros2 control list_controllers           # joint_state_broadcaster + forward_position_controller active
+ethercat slaves                         # alias 6 in OP
+ros2 topic echo /joint_states --once    # bench_joint position in raw encoder counts
+
+# Move (raw encoder counts; +30000 ≈ 0.23 motor rev):
+ros2 topic pub --once /forward_position_controller/commands \
+    std_msgs/msg/Float64MultiArray "{data: [<current+30000>]}"
+
+# Switch to JTC (slow trajectory):
+ros2 control switch_controllers \
+    --deactivate forward_position_controller \
+    --activate bench_trajectory_controller
+```
+
+**RT-tuning required for stability** (Stage 6 exit criterion — verified 2026-05-14, 600 s clean): wrap as `chrt -f 80 ros2 launch manipulator_bringup ethercat_bench.launch.py`, AND ensure the eno1 NIC IRQ is pinned to CPU 1 (one-shot `sudo bash -c 'echo 2 > /proc/irq/56/smp_affinity'`, or persist via the `ethercat-irq-pin.service` recipe in `docs/manipulator_hardware_interface/rt_tuning.md`). Both knobs together drive `Working counter`/`UNMATCHED`/`SKIPPED`/`TIMED OUT` to **zero** over a 10-minute soak. Without the IRQ pin, even with `chrt`, you get ≈ 1 `TIMED OUT` per 44 s. **Never add `taskset -c 1`** — co-locating the ROS callbacks with the RT thread on the isolated CPU produces multi-millisecond PDO read times. See `docs/manipulator_hardware_interface/bringup.md` Stage 6 for the measurement table.
 
 ---
 

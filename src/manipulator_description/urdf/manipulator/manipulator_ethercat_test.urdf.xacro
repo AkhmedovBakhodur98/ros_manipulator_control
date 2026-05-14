@@ -1,0 +1,63 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    ros2_control hardware interface for EtherCAT bench bring-up (Stage 6).
+
+    Single-joint smoke configuration: bench_joint mapped to A6-200EC at
+    EEPROM alias 6, position 0 in the chain. Mirrors the PDO/DC config
+    validated by tools/csp_smoke (Stage 4, 2026-05-14).
+
+    bench_joint is paired with a tiny standalone link tree (world → bench_link)
+    so that the geometric URDF contains the joint by name. ros2_control_node
+    requires every <joint> declared in <ros2_control> to also exist in the
+    URDF; without that pairing it aborts with "Joint 'bench_joint' not
+    found in URDF" before the EtherCAT stack ever comes up.
+
+    Slave YAML lives in manipulator_hardware_interface to avoid a reverse
+    dependency from manipulator_description; its directory is passed as
+    a xacro arg by manipulator_hardware_interface/launch/.
+  -->
+
+  <xacro:macro name="manipulator_ethercat_bench" params="slave_config_dir">
+
+    <!-- Tiny standalone link/joint pair so bench_joint exists in the URDF
+         tree. Limits are in raw 17-bit encoder counts (no scaling in
+         a6_200ec_slave.yaml for Stage 6); ±400 000 ≈ ±3 motor revs. -->
+    <link name="bench_link"/>
+    <joint name="bench_joint" type="revolute">
+      <parent link="world"/>
+      <child link="bench_link"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="-400000" upper="400000" velocity="50000" effort="1000"/>
+    </joint>
+
+    <ros2_control name="manipulator_ec_bench" type="system">
+
+      <hardware>
+        <plugin>ethercat_driver/EthercatDriver</plugin>
+        <param name="master_id">0</param>
+        <!-- Must match the SYNC0 cycle implied by assign_activate=0x300 in
+             a6_200ec_slave.yaml. csp_smoke ran 1 kHz; keep it identical
+             until Stage 7 retunes for the full chain. -->
+        <param name="control_frequency">1000</param>
+      </hardware>
+
+      <joint name="bench_joint">
+        <command_interface name="position"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <ec_module name="A6_200EC">
+          <plugin>ethercat_generic_plugins/EcCiA402Drive</plugin>
+          <param name="alias">6</param>
+          <param name="position">0</param>
+          <param name="mode_of_operation">8</param>  <!-- CSP -->
+          <param name="slave_config">${slave_config_dir}/a6_200ec_slave.yaml</param>
+        </ec_module>
+      </joint>
+
+    </ros2_control>
+
+  </xacro:macro>
+
+</robot>
