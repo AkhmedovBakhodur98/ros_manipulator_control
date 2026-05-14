@@ -1,6 +1,6 @@
 # EtherCAT Master Setup
 
-> Notes for installing and configuring the IgH EtherCAT master on the `grenka` dev machine. As of 2026-05-13, none of this is installed yet — these are planning notes derived from the upstream documentation and from issue research.
+> Host-level EtherCAT stack — IgH master, kernel modules, systemd integration. **Installed and verified on `grenka` 2026-05-14 (Stage 2 of [bringup.md](bringup.md)).** This document is the canonical recipe; the bringup checklist references it.
 
 ## Stack Choice
 
@@ -107,65 +107,41 @@ ethercat slaves
 # Expected (test bench): 2 slaves, A6-750EC + A6-200EC
 ```
 
-## Build `ethercat_driver_ros2`
+## ROS 2 driver build
+
+The ICube `ethercat_driver_ros2` build, clone command, pinned upstream HEAD, local patches, and verification steps are documented in **[bringup.md Stage 5](bringup.md)** and **[known_issues.md §1, §16](known_issues.md)**. The patches we maintain locally live in [`patches/`](patches/) and apply against the pinned upstream HEAD.
+
+Key fact for this document: the driver expects `libethercat` and `ecrt.h` reachable from the prefix passed via `-DETHERLAB_DIR`. Our IgH is in `/usr/local/{lib,include}`, so the colcon command is:
 
 ```bash
-# ROS 2 Jazzy assumed (not yet installed on grenka as of 2026-05-13)
-cd ~/ros_manipulator_control/src
-git clone --branch jazzy https://github.com/ICube-Robotics/ethercat_driver_ros2.git
-cd ..
-rosdep install --from-paths src --ignore-src -r -y
-colcon build --packages-select ethercat_driver ethercat_master_interface ethercat_interface
+colcon build --packages-up-to ethercat_driver_ros2 ethercat_generic_cia402_drive ethercat_manager \
+             --cmake-args -DETHERLAB_DIR=/usr/local
 ```
 
-## Slave Configuration
+## Slave configuration
 
-A6-EC PDO mapping is described in [a6_pdo_mapping.md](a6_pdo_mapping.md). Slave YAML files will live in `config/ethercat/` of this package.
+A6-EC PDO mapping (verified PDOs, Object Dictionary subset we care about, scaling) is in [a6_pdo_mapping.md](a6_pdo_mapping.md). Verified identity (`vendor_id 0x00400000`, `product_id 0x00000715`, etc.) is also there.
 
-Reference shape (from ICube examples):
-
-```yaml
-vendor_id: 0x000004F2          # StepperOnline (verify against ESI XML)
-product_id: 0x00000001         # verify against ESI XML
-assign_activate: 0x0300        # DC enable, sync0 + sync1
-sm: [...]                      # Sync Manager config
-rpdo:
-  - index: 0x1600              # variable mapping — NOT 0x1701 (see known_issues)
-    channels:
-      - { index: 0x6040, sub_index: 0, type: uint16 }   # ControlWord
-      - { index: 0x607A, sub_index: 0, type: int32  }   # Target Position
-      - { index: 0x60FF, sub_index: 0, type: int32  }   # Target Velocity (S32!)
-      - { index: 0x6060, sub_index: 0, type: int8   }   # Mode of Operation
-tpdo:
-  - index: 0x1A00
-    channels:
-      - { index: 0x6041, sub_index: 0, type: uint16 }   # StatusWord
-      - { index: 0x6064, sub_index: 0, type: int32  }   # Actual Position
-      - { index: 0x606C, sub_index: 0, type: int32  }   # Actual Velocity
-      - { index: 0x6077, sub_index: 0, type: int16  }   # Actual Torque
-      - { index: 0x6061, sub_index: 0, type: int8   }   # Mode Display
-```
-
-The exact `vendor_id`/`product_id` and SM config must come from the StepperOnline ESI file:
-<https://www.omc-stepperonline.com/index.php?route=product/product/get_file&file=5072/STEPPERONLINE_A6_Servo_V0.04.xml>
+A working **C reference** of the full single-slave bring-up — variable PDO remap via SDO, DC sync, CiA 402 state machine, sine target — is the [`tools/csp_smoke/`](../../tools/csp_smoke/) program from Stage 4. Stage 6 will translate the same configuration into per-slave YAML for `ros2_control` (no C++ plugin — see [package_structure.md](package_structure.md) for the rationale).
 
 ## Permissions
 
-Add the developer user to the `ethercat` group (created by `make install`) so the userspace `ethercat` command and the ROS 2 driver can talk to the master without `sudo`:
+The IgH installer does **not** create the `ethercat` group or the udev rule for `/dev/EtherCAT0` (this surprised us — see [known_issues.md §10](known_issues.md)). After `make modules_install install` the device node appears as `crw------- root root`. One-time fix:
 
 ```bash
-sudo usermod -aG ethercat $USER
-# log out and back in
+sudo groupadd -f ethercat
+sudo tee /etc/udev/rules.d/99-ethercat.rules >/dev/null <<'EOF'
+KERNEL=="EtherCAT[0-9]*", MODE="0660", GROUP="ethercat"
+EOF
+sudo udevadm control --reload
+sudo udevadm trigger
+sudo usermod -aG ethercat "$USER"
+# log out and back in (or `newgrp ethercat` for the current shell only)
 ```
 
-Also drop a udev rule for `eno1`:
+Verify: `ls -l /dev/EtherCAT0` → `crw-rw---- root ethercat`, then `/usr/local/bin/ethercat master` without `sudo` should print `Phase: Idle`.
 
-```
-# /etc/udev/rules.d/99-ethercat.rules
-KERNEL=="eno1", RUN+="/usr/sbin/ethtool -K eno1 gso off gro off tso off"
-```
-
-(NIC tuning details in [rt_tuning.md](rt_tuning.md).)
+NIC offload / coalescing tuning (a separate concern from device-node permissions) is in [rt_tuning.md](rt_tuning.md).
 
 ## What Happens at Bringup
 

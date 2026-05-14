@@ -27,8 +27,6 @@ Read via `ethercat upload -p <N>` on bench (1× A6-200EC + 1× A6-750EC, both in
 
 ## What A6-EC actually is
 
-## What A6-EC actually is
-
 StepperOnline A6-EC is a **standard CiA 402 servo drive** with EtherCAT communication. Complexity is comparable to Delta ASDA-A2/A3 or Leadshine ELP — far simpler than Beckhoff AX5000. 17-bit absolute encoder, DC sync up to 125 µs.
 
 Modes of operation supported (relevant to us):
@@ -65,19 +63,22 @@ We will use variable mapping. It's slightly more verbose in YAML but guarantees 
 
 **`target-velocity` (0x60FF) is signed INT32.** This is called out separately because some drives use U32 here, and the LinuxCNC threads explicitly note that A6 uses S32 — getting this wrong silently produces wrong direction at speeds > 2³¹ count/s.
 
-## CSP PDO Map (Planned YAML)
+## CSP PDO Map (Bench-verified)
+
+Map below is what [`tools/csp_smoke/csp_smoke.c`](../../tools/csp_smoke/csp_smoke.c) actually applied during Stage 4 (2026-05-14) — drive reached `OperationEnabled`, kernel log clean in steady state, sine ±50000 counts @ 0.5 Hz tracks within ~100 counts. The YAML form is a 1:1 translation of that C config; Stage 6 will write it.
 
 ```yaml
-# config/ethercat/a6_750ec_slave.yaml (sketch — sync_*/PDO map still to verify on bench)
+# config/ethercat/a6_200ec_slave.yaml (bench-verified shape, awaiting Stage 6 wiring)
 vendor_id: 0x00400000          # verified 2026-05-14 from drive SDO 0x1018:01
 product_id: 0x00000715         # verified 2026-05-14 from drive SDO 0x1018:02
 revision_number: 0x00002ef8    # SII value (used by master during scan)
-alias: 4                       # bench A6-750EC; A6-200EC uses alias 6
+alias: 6                       # bench A6-200EC; A6-750EC uses alias 4
 
-# DC clocks: SYNC0 + SYNC1 active, 0-shift, 1 ms cycle
+# DC clocks: AssignActivate from ESI OpMode DC, 1 ms cycle
 assign_activate: 0x0300
-sync0_cycle: 1000000           # ns = 1 ms
-sync0_shift: 500000            # half-cycle shift; verify empirically
+sync0_cycle: 1000000           # ns = 1 ms — verified
+sync0_shift: 0                 # works for single-slave smoke; see known_issues.md §15
+                               # for the multi-slave / loaded case (tune to 100-500 µs)
 
 sm:
   - { index: 2, type: output, watchdog: enable, pdos: [0x1600] }
@@ -107,6 +108,23 @@ sdo:
 ```
 
 The A6-750EC, A6-400EC and A6-200EC share the same object dictionary (same CiA 402 implementation). Differences are mechanical (rated torque/speed) and electrical (current). The same YAML structure applies — only the per-joint scaling and limits change.
+
+## Verified Operational Parameters (factory defaults read 2026-05-14)
+
+Read from A6-200EC alias 6 via `ethercat upload -p 0 -t <type> <index> <sub>` after Stage 4 smoke:
+
+| SDO | Name | Value | Notes |
+|---|---|---|---|
+| `0x6065:0` | Following Error Window | `429,483` counts | ≈ 3.3 motor revs — very generous. Don't tighten without empirical justification ([known_issues.md §15](known_issues.md)). |
+| `0x6066:0` | Following Error Timeout | `0` ms | Effectively disabled at factory. |
+| `0x6072:0` | Max Torque | `3000` (= 300.0% of rated) | Drive can deliver triple nominal torque. |
+| `0x60E0:0` | Positive Torque Limit | `3000` | Same as 0x6072. |
+| `0x60E1:0` | Negative Torque Limit | `3000` | Same as 0x6072. |
+| `0x6073:0` | Max Current | — | Object **does not exist** on this firmware (SDO abort `0x06020000`). |
+| `0x6075:0` | Motor Rated Current | — | Object **does not exist** on this firmware. |
+| `0x603F:0` | Error Code | (latches `0x8700` after teardown) | CiA 402 standard sync-error code. Cleared by Fault Reset (CW bit 7 toggled while in Fault state). |
+
+These are what the drive ships with — they imply we do **not** need to write tuning SDOs for first-light. Reconfigure only when bring-up moves to multi-axis under load.
 
 ## Scaling
 

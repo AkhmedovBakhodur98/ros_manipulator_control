@@ -8,7 +8,7 @@ ROS2 control system for manipulator robot with optional SCARA arm module.
 src/
 ├── manipulator_bringup/           # Launch infrastructure
 ├── manipulator_description/       # Main manipulator robot
-├── manipulator_hardware_interface/# EtherCAT hardware interface (PLANNED, see docs)
+├── manipulator_hardware_interface/# EtherCAT hardware interface (host stack ready; ROS package pending Stage 6)
 ├── ros_control/                   # Unified control interface
 ├── scara_description/             # SCARA arm module (optional)
 ├── scara_control/                 # SCARA arm control library
@@ -69,8 +69,10 @@ Standalone 6-DOF AR4 arm (AR4 MK3). Not integrated with the manipulator system.
 ### ar4_control
 Minimal placeholder package for future AR4 arm control development. Follows `scara_control` pattern (`ament_python`), currently empty.
 
-### manipulator_hardware_interface (PLANNED — not yet implemented)
-EtherCAT hardware interface for the main manipulator (Z/X/A axes) and SCARA arm, driving StepperOnline A6-EC servos. Uses [ICube-Robotics/ethercat_driver_ros2](https://github.com/ICube-Robotics/ethercat_driver_ros2) `EcCiA402Drive` plugin via per-slave YAML configs — no custom C++ plugin. Replaces the Teensy-based path for production manipulator; AR4 keeps its own Teensy interface (`ar4_hardware_interface`). See `docs/manipulator_hardware_interface/` for the full plan.
+### manipulator_hardware_interface (host stack ready; ROS package pending Stage 6)
+EtherCAT hardware interface for the main manipulator (Z/X/A axes) and SCARA arm, driving StepperOnline A6-EC servos. Uses [ICube-Robotics/ethercat_driver_ros2](https://github.com/ICube-Robotics/ethercat_driver_ros2) `EcCiA402Drive` plugin via per-slave YAML configs — no custom C++ plugin. Replaces the Teensy-based path for production manipulator; AR4 keeps its own Teensy interface (`ar4_hardware_interface`).
+
+Status on `grenka` 2026-05-14: Stages 1-5 of [bringup.md](../manipulator_hardware_interface/bringup.md) are closed (RT kernel, IgH master, slave discovery, single-slave CSP smoke via [`tools/csp_smoke/`](../../tools/csp_smoke/), ICube driver built with local patches). Stage 6 (per-slave YAML + ros2_control launch) is the next step. See `docs/manipulator_hardware_interface/` for the full plan and history.
 
 ## Key Configuration Files
 
