@@ -150,7 +150,47 @@ sudo usermod -aG ethercat "$USER"
 
 Verify: `ls -l /dev/EtherCAT0` → `crw-rw---- root ethercat`, then `/usr/local/bin/ethercat master` without `sudo` should print `Phase: Idle`.
 
-## 11. Vendor docs we still want
+## 12. All A6-EC drives share Vendor + Product + Revision
+
+**Severity:** medium — silent footgun if you bind axes by identity.
+
+Verified on bench 2026-05-14: A6-200EC and A6-750EC return **identical** `0x1018:01..03`:
+
+| | A6-200EC | A6-750EC |
+|---|---|---|
+| Vendor ID | `0x00400000` | `0x00400000` |
+| Product Code | `0x00000715` | `0x00000715` |
+| Revision (SDO `0x1018:03`) | `0x00005612` | `0x00005612` |
+| Revision (SII) | `0x00002ef8` | `0x00002ef8` |
+| Device Name (`0x1008`) | `AS715N-DRIVER` | `AS715N-DRIVER` |
+
+Wattage (200 / 400 / 750 W) is mechanical/electrical, not encoded in the EtherCAT identity. **Do not rely on `vendor_id`+`product_id` to attach the right joint to the right drive** — the master will accept the first physical slave in the chain even if you wired them in the wrong order.
+
+**Mitigation:** assign a unique **alias** in EEPROM for each drive and reference it in the `ros2_control` slave YAML.
+
+```bash
+# Persist alias 4 to slave currently at chain position 1:
+sudo ethercat alias --alias 4 -p 1
+sudo ethercat alias -p 1   # read back
+# Power-cycle the drive; aliases are picked up at EtherCAT start-up.
+```
+
+On our bench: A6-200EC = alias `6`, A6-750EC = alias `4`. Production deployment must follow the same convention (per-axis alias map will live alongside the slave YAML).
+
+## 13. Drive-side faults do not block EtherCAT discovery
+
+**Severity:** low — *informational*, useful diagnostically.
+
+When the A6-750EC came up on the bench without a motor connected, its seven-segment displayed `E202` ("encoder communication / no encoder"). Despite this, the slave reached `PREOP` cleanly, returned all standard CiA 301 SDOs, and stayed there indefinitely. The reason is structural: the ESC chip (LAN9252-class) runs its own state machine for EtherCAT init and only later hands off to the drive MCU for OP-mode work. Drive-side faults that block enable do not block PREOP.
+
+**Use this for bring-up diagnostics:**
+
+- Slave in `PREOP` + flag `+` (no AL error) → EtherCAT stack on the drive is healthy. Any "the drive won't enable" symptom is on the drive/motor side, not on EtherCAT.
+- Slave missing from `ethercat slaves` or stuck in `INIT` → that *is* an EtherCAT-level problem (wiring, alias collision, mailbox config, etc.).
+
+This separation will save time in Stage 4+ when we start chasing OP-state issues — check the EtherCAT layer is clean before debugging the CiA 402 state machine.
+
+## 14. Vendor docs we still want
 
 We would like to ask StepperOnline support for:
 

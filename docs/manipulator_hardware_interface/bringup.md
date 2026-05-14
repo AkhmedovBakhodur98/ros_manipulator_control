@@ -54,30 +54,31 @@ Follow [ethercat_setup.md](ethercat_setup.md). Sub-checklist with state on `gren
 
 **Note:** NIC tuning script + IRQ pin script (`ethtool -K eno1 ...`, `/proc/irq/<n>/smp_affinity` for the NIC IRQ) are tracked separately under [rt_tuning.md](rt_tuning.md) Stage 3-equivalent — they're NOT prerequisites to bringing the master to `IDLE`, only to keeping jitter low at runtime.
 
-## Stage 3 — Slave Discovery
+## Stage 3 — Slave Discovery ✅ (closed 2026-05-14 on `grenka`)
 
-1. Power up the test bench (2 slaves)
-2. Plug the daisy-chain into `eno1`
-3. Check:
+Bench topology (per [project-motor-upgrade](../../../ros_manipulator_control)): `eno1 → A6-200EC (alias 6, motor connected) → A6-750EC (alias 4, motor not connected — too heavy for the test bench)`.
 
-```bash
-ethercat slaves
-# Expected:
-# 0  0:0  PREOP  +  StepperOnline A6-750EC (or similar product string)
-# 1  0:1  PREOP  +  StepperOnline A6-200EC
-```
+1. ✅ Both drives powered, daisy-chain plugged into `eno1`.
+2. ✅ `ethercat slaves` after bringing the chain up:
 
-4. Read identification SDOs:
+   ```
+   0  6:0  PREOP  +  AS715N_sAxis_V0.10
+   1  4:0  PREOP  +  AS715N_sAxis_V0.10
+   ```
 
-```bash
-ethercat upload --type uint32 0x1018 1   # Vendor ID
-ethercat upload --type uint32 0x1018 2   # Product Code
-ethercat upload --type string 0x1008 0   # Device name
-```
+   Both in `PREOP`, flag `+` (no AL error). Note that the device-name string is the same — see Stage-3 finding below.
 
-5. Cross-check against the ESI XML — these are the values that go into `vendor_id`/`product_id` of the slave YAML.
+3. ✅ Identification SDOs read from both slaves (`ethercat upload -p {0,1} 0x1018 1..4`, `0x1008`, `0x1009`, `0x100A`). Full table is in [a6_pdo_mapping.md §Verified Identity](a6_pdo_mapping.md).
 
-**Exit criterion:** both slaves visible in `PREOP`, vendor/product IDs match the ESI.
+4. ✅ Cross-check vendor/product against ESI — *deferred*. We have hardware-authoritative IDs from the live drives (`0x00400000 / 0x00000715`). The ESI XML is more useful in Stage 4 to enumerate mappable PDO entries — will fetch then.
+
+**Findings worth carrying forward:**
+
+- **All A6-EC drives share Vendor+Product+Revision** (`0x00400000 / 0x00000715 / 0x00002ef8` SII). 200EC and 750EC on the bench were byte-identical at the EtherCAT identity layer. Disambiguate via **EEPROM alias** (bench: 200EC=6, 750EC=4) or chain position. ICube `ros2_control` YAML supports `alias:` — that's the path. See [a6_pdo_mapping.md §Verified Identity](a6_pdo_mapping.md).
+- **Drive-side faults (e.g. `E202` "no encoder" when motor disconnected) do not block EtherCAT discovery.** The 750EC came up to PREOP cleanly while displaying `E202` on its seven-segment, because the ESC chip (LAN9252/AX58100-class) operates independently of the drive MCU's enable logic. Useful diagnostically: PREOP + AL-flag clean = the EtherCAT stack on the drive is healthy, even if the drive is refusing to enable due to a motor-side condition.
+- **No `Enable SDO Info`** on this firmware — `ethercat sdos` cannot enumerate the object dictionary. We have to know SDO indices in advance (CiA 402 standard + manual).
+
+**Exit criterion met:** both slaves visible in `PREOP`, vendor/product IDs captured and recorded.
 
 ## Stage 4 — Single-Slave PDO Validation (No ROS)
 

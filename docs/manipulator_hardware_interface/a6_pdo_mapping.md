@@ -1,6 +1,31 @@
 # A6-EC Series PDO Mapping
 
-> Notes on configuring StepperOnline A6-EC servo drives (A6-200EC, A6-400EC, A6-750EC) as CiA 402 slaves under IgH + `ethercat_driver_ros2`. As of 2026-05-13 no slave has been connected yet — these notes come from the StepperOnline ESI/manual and from LinuxCNC community experience (no public ROS 2 deployment of A6-EC exists yet, we are the first).
+> Notes on configuring StepperOnline A6-EC servo drives (A6-200EC, A6-400EC, A6-750EC) as CiA 402 slaves under IgH + `ethercat_driver_ros2`. Identity values below were verified on real hardware on `grenka` 2026-05-14 (Stage 3 of [bringup.md](bringup.md)). Object-dictionary subset is from StepperOnline manual + LinuxCNC community (no public ROS 2 deployment of A6-EC exists yet, we are the first).
+
+## Verified Identity (from physical drives, 2026-05-14)
+
+Read via `ethercat upload -p <N>` on bench (1× A6-200EC + 1× A6-750EC, both in `PREOP`):
+
+| SDO | Value |
+|---|---|
+| `0x1018:01` Vendor ID | `0x00400000` |
+| `0x1018:02` Product Code | `0x00000715` |
+| `0x1018:03` Revision | `0x00005612` (via SDO) / `0x00002ef8` (via SII) |
+| `0x1018:04` Serial Number | `0x00000000` (not flashed by vendor) |
+| `0x1008` Device Name | `AS715N-DRIVER` |
+| `0x1009` HW Version | `V001` |
+| `0x100A` SW Version | `V512` |
+| Order number (SII) | `ANCTL AS715N Servo Driver` |
+| Group (SII) | `AC Servo Driver` |
+
+**Critical: all A6-EC drives share the same Vendor+Product+Revision.** Identity SDOs from A6-200EC and A6-750EC on the bench were byte-identical. The wattage (200W vs 750W) is **not** distinguishable via EtherCAT-level identity — it lives in the motor/drive hardware (FETs, current sensors) and possibly in vendor-specific SDOs (TBD when ESI XML lands). Bind axes via:
+
+1. **Alias in EEPROM** (preferred, what we use on the bench): `ethercat alias --alias N -p <pos>` writes a unique number, survives reboots, and is what `ros2_control` YAML should reference. On the bench: A6-200EC = alias `6`, A6-750EC = alias `4`.
+2. **Ring position** (slave 0, 1, 2, ...) — fragile: re-cabling reshuffles indices.
+
+**Revision mismatch SDO vs SII:** SDO `0x1018:03` returns `0x5612` (firmware-reported), SII (EEPROM) carries `0x2ef8`. Both come from the same drive — they are independent fields. `ros2_control` slave matching uses the SII value (that's what the master sees during scan).
+
+## What A6-EC actually is
 
 ## What A6-EC actually is
 
@@ -43,9 +68,11 @@ We will use variable mapping. It's slightly more verbose in YAML but guarantees 
 ## CSP PDO Map (Planned YAML)
 
 ```yaml
-# config/ethercat/a6_750ec_slave.yaml (sketch — verify against ESI before deploying)
-vendor_id: 0x000004F2          # TODO: confirm from STEPPERONLINE_A6_Servo_V0.04.xml
-product_id: 0x00000001         # TODO: confirm
+# config/ethercat/a6_750ec_slave.yaml (sketch — sync_*/PDO map still to verify on bench)
+vendor_id: 0x00400000          # verified 2026-05-14 from drive SDO 0x1018:01
+product_id: 0x00000715         # verified 2026-05-14 from drive SDO 0x1018:02
+revision_number: 0x00002ef8    # SII value (used by master during scan)
+alias: 4                       # bench A6-750EC; A6-200EC uses alias 6
 
 # DC clocks: SYNC0 + SYNC1 active, 0-shift, 1 ms cycle
 assign_activate: 0x0300
