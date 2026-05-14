@@ -176,8 +176,11 @@ Extends the bench slave map with the digital-input word so application code can 
 | N-OT pressed → `0x60FD = 0x00020001` (CiA bit 0 + raw DI2 bit 17) | ✅ |
 | With P-OT held, FPC target = current + 20000 (forward) → position does not advance | ✅ — drive self-clamps |
 | StatusWord `0x6041` bit 11 ("Internal limit active") = 1 during the hold | ✅ |
+| **In-motion test:** JTC trajectory +250000 counts forward over 15 s (≈ 7.6 rpm), operator hits P-OT mid-trajectory at pos ≈ 322k → drive halts immediately, JTC keeps streaming targets up to 383134 but drive ignores them, final pos 322912 (delta 60222 counts ≈ ½ revolution short of target). | ✅ — drive halt is one-cycle, no fault transition |
 
 Drive latched `0x603F = 0x5443` (vendor alarm code, decoding deferred to Chapter 10.1.3 of the manual; not blocking — drive stayed in OperationEnabled).
+
+**⚠️ JTC monitoring caveat (must be addressed in Stage 6.6b safety node):** in the in-motion test the JTC `FollowJointTrajectory` action returned `error_code: 0, status: SUCCEEDED, "Goal successfully reached!"` even though the drive was self-clamped half a revolution before the requested target. JTC's default position/goal-time tolerances are wide; without explicit `path_tolerance`/`goal_tolerance` in the action goal it does not detect a self-clamping drive. Consumers must NOT trust JTC's `SUCCEEDED` as proof the axis reached the commanded position when overtravel could be in play — poll `0x6041` bit 11 (Internal limit active) or compare commanded-vs-actual position in a side node. Tightening the JTC tolerances is a partial workaround but the side-node observable is more honest because the same problem surfaces under any controller, not just JTC.
 
 The full DI/DO map and bit semantics are in [a6_dio_mapping.md](a6_dio_mapping.md). Manual is vendored at [`vendor/A6-EC_series_servo_drive_manual.pdf`](vendor/A6-EC_series_servo_drive_manual.pdf).
 
