@@ -1,0 +1,17 @@
+[Unit]
+Description=Pin eno1 EtherCAT NIC IRQs to isolated CPU 1
+# After ethercat.service so the master is up; after network so eno1 is registered
+# (the script reads /proc/interrupts which only lists the NIC after it has been
+# probed by its driver).
+After=network.target ethercat.service
+Wants=ethercat.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/ethercat-irq-pin.sh
+RemainAfterExit=true
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

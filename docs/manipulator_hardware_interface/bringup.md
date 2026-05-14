@@ -157,17 +157,17 @@ chrt -f 80 ros2 launch manipulator_bringup ethercat_bench.launch.py
 
 `chrt -f 80` raises the SCHED_FIFO priority of the `ros2_control_node` worker from the controller_manager default of 50; the system limit is 95 (set by `system.conf.d/99-ethercat-rt.conf` from Stage 4). `taskset -c 1` was tried but **made things worse** — pinning the whole process tree to CPU 1 forced ROS callbacks to compete with the RT thread on the same core, producing 2–4 ms PDO read times and overruns. Letting the scheduler keep ROS callbacks on CPU 0 (NIC IRQ co-located with the RT-thread cache on CPU 1 is what matters) is the right shape.
 
-## Stage 6.5 — RT-tuning persistence ⚠️ partially open
+## Stage 6.5 — RT-tuning persistence ✅ IRQ-pin closed (2026-05-14); launch wrapper / thread_priority deferred
 
-Stage 6 verified the recipe works in a one-off shell; Stage 6.5 makes it survive a reboot and a `systemctl restart`.
+Stage 6 verified the recipe works in a one-off shell; Stage 6.5 makes it survive a reboot.
 
-**Open work:**
+**IRQ pin — closed:** `ethercat-irq-pin.service` ([system/ethercat-irq-pin.service](system/ethercat-irq-pin.service)) runs [`/usr/local/sbin/ethercat-irq-pin.sh`](system/ethercat-irq-pin.sh) once after `ethercat.service`, walks every eno1 IRQ in `/proc/interrupts` and writes `2` to its `smp_affinity`. Installed and enabled on `grenka` 2026-05-14 — `systemctl status` reports `active (exited)`, journal logs `pinned IRQ 56 → CPU 1 (effective: 00000002)`. The script is per-IRQ so it survives any future NIC driver change that adds rx/tx queues with their own IRQs. Reboot verification still pending (the box is in continuous use), but the unit is `WantedBy=multi-user.target` and `enabled` so first reboot after this lands closes that loop.
 
-1. Persist the IRQ pin. Today `/proc/irq/56/smp_affinity` resets to `00000001` on every boot — needs either a one-shot systemd unit (`After=ethercat.service`, runs the `echo 2 > ...`), an `irqbalance` ban-list entry, or a kernel cmdline `irqaffinity=` adjustment that allows CPU 1.
-2. Decide whether to wrap the launch in a `manipulator-ec-bench.service` systemd unit with `CPUSchedulingPolicy=fifo`, `CPUSchedulingPriority=80`, `LimitRTPRIO=95`, `LimitMEMLOCK=infinity`. Avoids needing `chrt` in the user's command line; also gives a clean `journalctl -u` log path.
-3. (Stretch) investigate the `controller_manager` `thread_priority` ROS parameter — if it works, we drop the `chrt` wrapper entirely.
+**Deferred to Stage 7+ (decide if/when needed):**
 
-These are configuration items, not new development; deferred until Stage 7 multi-slave bring-up tells us whether the 1-axis recipe scales.
+1. **Wrap the launch in a systemd unit** (`manipulator-ec-bench.service`) with `CPUSchedulingPolicy=fifo`, `CPUSchedulingPriority=80`, `LimitRTPRIO=95`, `LimitMEMLOCK=infinity`. Removes the need to remember `chrt` and gives a clean `journalctl -u` path. Cosmetic for dev work; matters more once the chain becomes a production setup.
+2. **`controller_manager` ROS parameter `thread_priority`** — if it actually overrides the SCHED_FIFO 50 default, we drop the `chrt` wrapper entirely. Untested in our setup; not blocking.
+3. **NIC offload tuning** (`ethtool -K eno1 gso off gro off ...`, link speed lock) — recipe already in [rt_tuning.md §NIC Tuning](rt_tuning.md). Stage 6 exit criterion passed *without* it on a 2-slave bus, so deferred until Stage 7 multi-slave shows whether it's actually needed.
 
 ## Stage 7 — Full Chain Bringup
 
