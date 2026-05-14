@@ -145,17 +145,35 @@ When debugging, `ethercat upload 0x6041 0 -p 0` reads the current StatusWord dir
 
 ## ESI File Reference
 
-The authoritative source for `vendor_id`, `product_id`, allowed Sync Manager configurations, and the full object dictionary is the StepperOnline ESI XML:
+Vendor ESI XML is checked into the repo at [`vendor/STEPPERONLINE_A6_Servo_V0.04.xml`](vendor/STEPPERONLINE_A6_Servo_V0.04.xml) (310 KB, SHA256 `b8e96d8a0d1e5da413c3be0255be1df6a16cde55bc89a2d1800bf13b6490e9f6`).
 
+Source:
 <https://www.omc-stepperonline.com/index.php?route=product/product/get_file&file=5072/STEPPERONLINE_A6_Servo_V0.04.xml>
 
-The IgH master can load this directly:
+**Note on IgH usage:** IgH 1.6 master does **not** auto-load ESI files at runtime — the master reads SII from each slave's EEPROM at scan time. The XML is for our own reference (mapping IDs to documentation, finding mappable PDO entries, sanity-checking SM addresses). No need to copy it anywhere on the host.
 
-```bash
-sudo cp STEPPERONLINE_A6_Servo_V0.04.xml /etc/ethercat/esi/
-sudo systemctl restart ethercat
-ethercat slaves -v   # should show readable device name and supported PDOs
-```
+**Version mismatch with hardware (not blocking):** the XML describes `A6N_sAxis_V0.04`. Our bench drives report `AS715N_sAxis_V0.10` (newer). All CiA 402 standard objects we care about (0x6040, 0x607A, 0x6060/61, etc.) are version-stable, but if we hit a vendor-specific object that doesn't behave as the XML says, suspect the version delta.
+
+**Confirmed against hardware (2026-05-14):**
+
+| Field | XML | Hardware (SDO/SII) | Match |
+|---|---|---|---|
+| Vendor ID | `0x00400000` | `0x00400000` | ✓ |
+| Product Code | `0x00000715` | `0x00000715` | ✓ |
+| Revision | `0x00002EF8` | `0x00002EF8` (SII) | ✓ |
+| ProfileNo | 402 | — (implicit from SDOs) | ✓ |
+| MBox Out / SM0 | `0x1000` / 256 B | `0x1000/256` | ✓ |
+| MBox In / SM1 | `0x1400` / 256 B | `0x1400/256` | ✓ |
+| SM2 (Outputs) | `0x1800`, 12 B default | — | n/a (set at runtime) |
+| SM3 (Inputs) | `0x1C00`, 28 B default | — | n/a (set at runtime) |
+| DC AssignActivate | `0x300` | — | — (we will set this) |
+
+**Variable PDOs (Fixed="0") — what's actually pre-mapped:**
+
+- `0x1600` ships with: `0x6040` Controlword, `0x607A` Target Position, `0x60B8` Touch Probe Function (only 3 entries — **Mode of Operation `0x6060` not pre-mapped, we must add it**).
+- `0x1A00` ships with: `0x6041` Statusword, `0x6064` Position Actual, `0x603F` Error Code, `0x60B9/BA/BC` Touch Probe, `0x60FD` Digital Inputs (**Mode Display `0x6061` and Actual Velocity `0x606C` not pre-mapped, must be added**).
+
+The Fixed-1 group `0x1701/0x1B01` (the default SM2/SM3 assignment) does not include `0x6060/0x6061` either — which is why CSP locks up in SafeOP+Error on it. Conclusion stands: reconfigure variable `0x1600/0x1A00` via SDO writes to `0x1600:0..N` and `0x1A00:0..N` before the slave transitions to PREOP→SafeOP.
 
 Manual PDF (object dictionary in human-readable form):
 <https://www.omc-stepperonline.com/download/A6-EC_series_servo_drive_manual.pdf>
