@@ -121,6 +121,55 @@ ethtool -s $NIC speed 100 duplex full autoneg off
 
 Register the same way as the IRQ-pin service. Note: not all parameters are supported by the generic driver — `|| true` swallows the harmless ones.
 
+## Userspace RT Limits
+
+Before any userspace process can call `sched_setscheduler(SCHED_FIFO, ...)` or `mlockall()`, the kernel needs to see non-zero `RLIMIT_RTPRIO` and a generous `RLIMIT_MEMLOCK` for that process. Default Ubuntu shell has `ulimit -r = 0` and `ulimit -l ≈ 50% of RAM` — both must be raised.
+
+### The Ubuntu 24.04 + GDM trap
+
+The "obvious" answer is to drop a file in `/etc/security/limits.d/`:
+
+```bash
+# /etc/security/limits.d/99-ethercat-rt.conf
+@ethercat   -   rtprio   95
+@ethercat   -   memlock  unlimited
+```
+
+**This is necessary but not sufficient.** `pam_limits.so` is wired into `/etc/pam.d/login` (TTY console) and `/etc/pam.d/sshd` — so SSH and Ctrl+Alt+F<n> consoles get the limits. But on a normal **desktop GDM/Wayland login**, the process tree looks like:
+
+```
+systemd (PID 1) ── user@1000.service ── systemd --user ── gnome-shell ── gnome-terminal-server ── bash
+```
+
+`systemd --user` is **not** spawned through PAM — it's launched directly by the system `systemd` via `user@<UID>.service`. So `pam_limits.so` from `/etc/pam.d/gdm-password` applies to the GDM session leader, but **not** to children of `systemd --user`. Open a graphical terminal, run `ulimit -r` — still `0`.
+
+### The fix that works under GDM
+
+Raise the limits via systemd defaults, which `user@<UID>.service` inherits:
+
+```bash
+sudo mkdir -p /etc/systemd/system.conf.d
+sudo tee /etc/systemd/system.conf.d/99-ethercat-rt.conf >/dev/null <<'EOF'
+[Manager]
+DefaultLimitRTPRIO=95
+DefaultLimitMEMLOCK=infinity
+EOF
+sudo reboot
+```
+
+After reboot, `ulimit -r` in `gnome-terminal` → `95`, `ulimit -l` → `unlimited`. `/etc/security/limits.d/99-ethercat-rt.conf` is still useful (covers SSH/TTY paths) — keep both.
+
+### Why 95, not 99
+
+Linux kernel reserves the highest real-time priorities for internal threads:
+
+- **99** — migration threads, watchdogs, RCU boost. User code preempting these can hang the kernel.
+- **80** — typical EtherCAT cyclic thread priority (IgH's own examples, ICube's `ethercat_driver_ros2`).
+
+The csp_smoke binary asks for priority **80**. The systemd ceiling is set to **95**, which provides headroom for ros2_control + IgH kernel master thread (also at 80) without giving userspace code the ability to starve kernel-critical threads.
+
+If you raise the systemd ceiling to 99, any buggy userspace loop running at priority 99 — even briefly — can soft-lock the machine. Don't.
+
 ## Real-Time Process Priorities
 
 When launching the controller_manager:

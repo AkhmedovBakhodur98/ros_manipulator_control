@@ -32,6 +32,9 @@ Thumbs.db
 *.a
 *.lib
 
+# In-tree C tool binaries (built next to their .c)
+tools/csp_smoke/csp_smoke
+
 # Generated URDF
 *.urdf
 !*.urdf.xacro

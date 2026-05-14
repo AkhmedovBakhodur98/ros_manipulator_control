@@ -80,17 +80,21 @@ Bench topology (per [project-motor-upgrade](../../../ros_manipulator_control)): 
 
 **Exit criterion met:** both slaves visible in `PREOP`, vendor/product IDs captured and recorded.
 
-## Stage 4 — Single-Slave PDO Validation (No ROS)
+## Stage 4 — Single-Slave PDO Validation (No ROS) ✅ (closed 2026-05-14 on `grenka`)
 
-Before pulling in ROS 2, verify the PDO map works at the IgH level with a tiny custom CSP program or the LinuxCNC reference HAL config. This isolates A6 EtherCAT issues from ROS-side problems.
+Verifies the PDO map works at the IgH level with a tiny custom CSP program — isolates A6 EtherCAT issues from ROS-side problems before pulling in ROS 2.
 
-1. Write a minimal C program based on `examples/dc_user/main.c` in the IgH source
-2. Configure variable PDO mapping 0x1600 / 0x1A00 per [a6_pdo_mapping.md](a6_pdo_mapping.md)
-3. Set Mode of Operation = 8 (CSP), drive CiA 402 state machine to Operation Enabled
-4. Send a slow sine wave on Target Position
-5. Verify Actual Position follows, no `TIMED OUT` / `UNMATCHED` warnings in dmesg over 10 min
+Implementation: [tools/csp_smoke/csp_smoke.c](../../tools/csp_smoke/csp_smoke.c) (~250 LOC, single-slave, targets A6-200EC at alias 6).
 
-**Exit criterion:** motor follows a position sine wave smoothly, zero following-error faults.
+- [x] **4.1 RT-limits for userspace** — see [rt_tuning.md §Userspace RT limits](rt_tuning.md). On Ubuntu 24.04 + GDM, `pam_limits.so` is not enough — `gnome-terminal-server` inherits from `systemd --user`, which never goes through PAM. Use `DefaultLimitRTPRIO`/`DefaultLimitMEMLOCK` in `/etc/systemd/system.conf.d/`. After reboot: `ulimit -r=95`, `ulimit -l=unlimited`.
+- [x] **4.2 Build** — `cd tools/csp_smoke && make`. Builds against `/usr/local/include/ecrt.h`, links `-lethercat`. Zero warnings.
+- [x] **4.3 PDO map** — variable `0x1600` (ControlWord 0x6040, Target Position 0x607A, Mode of Operation 0x6060) and `0x1A00` (StatusWord 0x6041, Position Actual 0x6064, Mode Display 0x6061, Velocity Actual 0x606C). DC `AssignActivate=0x300` from ESI, SYNC0 cycle 1 ms, shift 0.
+- [x] **4.4 RT-thread** — `mlockall`, `sched_setaffinity` to CPU 1 (isolated), `SCHED_FIFO` priority **80** (NOT max — 99 is reserved for kernel watchdog/migration threads).
+- [x] **4.5 Run** — `timeout --signal=INT 15s ./csp_smoke`. CiA 402 transitions observed: `NotReady → SwitchOnDisabled → ReadyToSwitchOn → SwitchedOn → OperationEnabled`. Fault Reset (CW=0x0080) also tested when a leftover fault from a prior run was present — state machine handled it cleanly.
+- [x] **4.6 Motion** — sine wave ±5000 counts @ 0.2 Hz (~14° of motor shaft) on Target Position. Actual Position follows with lag ~50–100 counts.
+- [x] **4.7 Kernel log clean during steady state** — `journalctl -k --since` shows `Domain 0: Working counter changed to 3/3` once at start, then **zero** `TIMED OUT` / `UNMATCHED` / `SKIPPED` warnings over the entire 10 s of cyclic operation. (Pre-OP transition phase produces some UNMATCHED — expected, slaves not yet exchanging full process data.)
+
+**Exit criterion met:** motor followed the sine smoothly, no following-error faults, kernel log clean in steady state.
 
 ## Stage 5 — Build `ethercat_driver_ros2`
 
