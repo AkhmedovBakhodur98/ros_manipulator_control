@@ -47,6 +47,11 @@
         <command_interface name="position"/>
         <state_interface name="position"/>
         <state_interface name="velocity"/>
+        <!-- Raw 0x60FD Digital Inputs word (Stage 6.6a). CiA 402 standard bit layout:
+             bit 0 = N-OT (negative limit), bit 1 = P-OT (positive limit), bit 2 = Home Switch.
+             Drive enforces overtravel on its side independently of this exposure — this is for
+             observability and the future homing action server. -->
+        <state_interface name="digital_inputs"/>
         <ec_module name="A6_200EC">
           <plugin>ethercat_generic_plugins/EcCiA402Drive</plugin>
           <param name="alias">6</param>

@@ -157,6 +157,32 @@ chrt -f 80 ros2 launch manipulator_bringup ethercat_bench.launch.py
 
 `chrt -f 80` raises the SCHED_FIFO priority of the `ros2_control_node` worker from the controller_manager default of 50; the system limit is 95 (set by `system.conf.d/99-ethercat-rt.conf` from Stage 4). `taskset -c 1` was tried but **made things worse** — pinning the whole process tree to CPU 1 forced ROS callbacks to compete with the RT thread on the same core, producing 2–4 ms PDO read times and overruns. Letting the scheduler keep ROS callbacks on CPU 0 (NIC IRQ co-located with the RT-thread cache on CPU 1 is what matters) is the right shape.
 
+## Stage 6.6a — Endstops on 200EC ✅ closed (2026-05-14)
+
+Extends the bench slave map with the digital-input word so application code can see the limit-switch state, and confirms that the drive enforces overtravel autonomously without our ros2_control loop.
+
+**Changes (single commit):**
+
+- `config/ethercat/a6_200ec_slave.yaml` — TPDO 0x1A00 gains one entry: `{index: 0x60FD, sub_index: 0, type: uint32, state_interface: digital_inputs}`. No SDO writes — factory DI function mapping (DI1=P-OT, DI2=N-OT, DI3=Home, DI4=Probe2, DI5=Probe1) is already what we want; vendor `0x2003` group is left at defaults.
+- `manipulator_description/urdf/manipulator/manipulator_ethercat_test.urdf.xacro` — `bench_joint` gets a 4th state_interface `digital_inputs`. ICube's generic plugin propagates it to `/dynamic_joint_states`.
+
+**Verified on bench:**
+
+| Test | Result |
+|---|---|
+| `bench_joint/digital_inputs` appears in `ros2 control list_hardware_interfaces` | ✅ |
+| `/dynamic_joint_states` carries `digital_inputs` value alongside position/velocity | ✅ |
+| P-OT pressed → `0x60FD = 0x00010002` (CiA bit 1 + raw DI1 bit 16) | ✅ |
+| N-OT pressed → `0x60FD = 0x00020001` (CiA bit 0 + raw DI2 bit 17) | ✅ |
+| With P-OT held, FPC target = current + 20000 (forward) → position does not advance | ✅ — drive self-clamps |
+| StatusWord `0x6041` bit 11 ("Internal limit active") = 1 during the hold | ✅ |
+
+Drive latched `0x603F = 0x5443` (vendor alarm code, decoding deferred to Chapter 10.1.3 of the manual; not blocking — drive stayed in OperationEnabled).
+
+The full DI/DO map and bit semantics are in [a6_dio_mapping.md](a6_dio_mapping.md). Manual is vendored at [`vendor/A6-EC_series_servo_drive_manual.pdf`](vendor/A6-EC_series_servo_drive_manual.pdf).
+
+**Stage 6.6b (deferred)** — write a homing action server that switches `mode_of_operation` to 6, drives ControlWord bit 4 rising edge, polls StatusWord bit 12 for completion, then switches back to CSP. Will use CiA 402 homing method 1 (search N-OT then nearest Z) or 2 (search P-OT then Z) — see [a6_pdo_mapping.md §CiA 402 State Machine](a6_pdo_mapping.md) and the Homing parameters table in [a6_dio_mapping.md](a6_dio_mapping.md). Speeds (`0x6099:01/02`) must be cut from the factory ~6400/640 rpm defaults to bench-safe values (~50000/5000 counts/s).
+
 ## Stage 6.5 — RT-tuning persistence ✅ IRQ-pin closed (2026-05-14); launch wrapper / thread_priority deferred
 
 Stage 6 verified the recipe works in a one-off shell; Stage 6.5 makes it survive a reboot.

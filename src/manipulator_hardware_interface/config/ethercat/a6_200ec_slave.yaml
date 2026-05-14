@@ -38,3 +38,10 @@ tpdo:
       - {index: 0x6064, sub_index: 0, type: int32, state_interface: position}                      # Actual Position — raw counts
       - {index: 0x6061, sub_index: 0, type: int8,  state_interface: mode_of_operation}             # Mode Display
       - {index: 0x606c, sub_index: 0, type: int32, state_interface: velocity}                      # Actual Velocity — drive reports rpm; no scaling for Stage 6
+      # Digital Inputs raw word (Stage 6.6a). Per A6-EC manual §3.7.2 + Chapter 9 the default
+      # CN1 mapping is DI1=P-OT (pin 10), DI2=N-OT (pin 9), DI3=HomeSwitch (pin 8), DI4=Probe2,
+      # DI5=Probe1. CiA 402 0x60FD bit layout: bit 0 = N-OT, bit 1 = P-OT, bit 2 = Home switch
+      # (vendor 0x2003 / 0x2004 group params can re-route which DI feeds which CiA bit if the
+      # default no longer fits). For Stage 6.6a we just expose the raw word; bit-extraction lives
+      # in higher-level logic (e.g. a homing action server or a safety node).
+      - {index: 0x60FD, sub_index: 0, type: uint32, state_interface: digital_inputs}

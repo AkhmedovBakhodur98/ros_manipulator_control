@@ -86,7 +86,8 @@ Exact bus order will be defined by physical daisy-chain order; we'll renumber he
 
 ## Related Documentation
 
-- [bringup.md](bringup.md) — Step-by-step bringup procedure (Stages 1-6 closed on `grenka`; Stage 6.5 RT-tuning is the next step)
+- [bringup.md](bringup.md) — Step-by-step bringup procedure (Stages 1-6 + 6.5 IRQ-pin + 6.6a endstops closed on `grenka`; Stage 6.6b homing action server is the next step)
+- [a6_dio_mapping.md](a6_dio_mapping.md) — A6-EC CN1 DI/DO pinout, `0x60FD` bit layout, drive-side overtravel behaviour
 - `../manipulator_description/package_structure.md` — `manipulator_ethercat_test.urdf.xacro` macro (`bench_joint` on EthercatDriver)
 - `../manipulator_bringup/package_structure.md` — `ethercat_bench.launch.py` Stage 6 launch
 - [ethercat_setup.md](ethercat_setup.md) — IgH master install, kernel modules, systemd service, /dev/EtherCAT0 permissions
