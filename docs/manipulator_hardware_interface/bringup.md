@@ -37,16 +37,22 @@ Follow [rt_tuning.md](rt_tuning.md):
 
 Final worst-case 7 µs is 14× below the 100 µs ceiling — generous headroom for IgH + ROS 2 jitter contributions to come.
 
-## Stage 2 — EtherCAT Master Install
+## Stage 2 — EtherCAT Master Install ✅ (closed 2026-05-14 on `grenka`)
 
-Follow [ethercat_setup.md](ethercat_setup.md):
+Follow [ethercat_setup.md](ethercat_setup.md). Sub-checklist with state on `grenka`:
 
-1. Build IgH `stable-1.6` from source with `--enable-generic`
-2. Configure `/etc/ethercat.conf` with `eno1` MAC + `DEVICE_MODULES="generic"`
-3. Enable and start `ethercat.service`
-4. Apply NIC tuning script + IRQ pin script via systemd units
+- [x] **2.1 Build deps** — `autoconf libtool pkg-config` (build-essential was already installed).
+- [x] **2.2 Clone IgH** — `git clone https://gitlab.com/etherlab.org/ethercat.git /opt/ethercat-src` (default branch is `stable-1.6`, current HEAD `b709e581 Version bump to 1.6.9`). `/opt/ethercat-src` is owned by `grenka:grenka` (post-`sudo mkdir` + `chown`) so configure/build run without sudo.
+- [x] **2.3 Configure** — `./bootstrap && ./configure --prefix=/usr/local --enable-generic --disable-8139too --disable-eoe`. Confirmed kernel sources at `/usr/src/linux-headers-6.8.1-1048-realtime (Kernel 6.8)`, EoE off.
+- [x] **2.4 Build** — `make -j$(nproc)` (userspace only) **then `make modules -j$(nproc)` separately** (kernel modules are NOT built by the default target — see [ethercat_setup.md](ethercat_setup.md) §1). Produced `master/ec_master.ko` and `devices/ec_generic.ko`.
+- [x] **2.5 Install** — `sudo make modules_install install && sudo depmod` — modules into `/lib/modules/$(uname -r)/ethercat/`, `ethercat` tool into `/usr/local/bin/`, libs into `/usr/local/lib/`, systemd unit into `/lib/systemd/system/ethercat.service`.
+- [x] **2.6 Master config** — wrote `/usr/local/etc/ethercat.conf` (NOT `/etc/ethercat.conf` — `ethercatctl` reads from prefix path) with `MASTER0_DEVICE="74:56:3c:30:04:57"`, `DEVICE_MODULES="generic"`, `UPDOWN_INTERFACES="eno1"`.
+- [x] **2.7 Start service** — Secure Boot disabled in BIOS (`mokutil --sb-state` = `disabled`), then `sudo systemctl restart ethercat` → `active (exited)`, `lsmod` shows `ec_master` + `ec_generic`, `sudo ethercat master` → `Phase: Idle`, `Link: DOWN` (expected — slave not yet connected, that's Stage 3). See [known_issues.md §7](known_issues.md) for the long-term DKMS path that avoids disabling SB.
+- [x] **2.8 User group** — IgH installer does **not** create the `ethercat` group or udev rule (see [known_issues.md §10](known_issues.md)). Manual: `groupadd -f ethercat`, `/etc/udev/rules.d/99-ethercat.rules` with `KERNEL=="EtherCAT[0-9]*", MODE="0660", GROUP="ethercat"`, `udevadm control --reload && udevadm trigger`, `usermod -aG ethercat $USER`, relogin. Verified: `groups | grep ethercat`, `/dev/EtherCAT0` → `root:ethercat 0660`, `/usr/local/bin/ethercat master` без sudo → `Phase: Idle`.
 
-**Exit criterion:** `ethercat master` reports `IDLE`, kernel modules `ec_master` and `ec_generic` loaded.
+**Exit criterion met:** `ethercat master` reports `Phase: Idle`, kernel modules `ec_master` and `ec_generic` loaded, accessible to `grenka` без sudo.
+
+**Note:** NIC tuning script + IRQ pin script (`ethtool -K eno1 ...`, `/proc/irq/<n>/smp_affinity` for the NIC IRQ) are tracked separately under [rt_tuning.md](rt_tuning.md) Stage 3-equivalent — they're NOT prerequisites to bringing the master to `IDLE`, only to keeping jitter low at runtime.
 
 ## Stage 3 — Slave Discovery
 

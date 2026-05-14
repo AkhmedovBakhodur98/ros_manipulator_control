@@ -13,58 +13,96 @@
 
 We initially planned SOEM (userspace, no kernel module). After surveying the ROS 2 ecosystem in 2026-05, the only living generic CiA 402 driver under Jazzy is ICube's, and it is built on IgH. The SOEM-based [`synapticon_ros2_control`](https://github.com/synapticon/synapticon_ros2_control) is hardcoded to the Synapticon SOMANET drive — porting it to A6 would mean rewriting PDO mapping and SDO init from scratch. IgH gives us a faster path to working hardware.
 
-## Install Procedure (Planned)
+## Install Procedure
+
+Steps below were applied on `grenka` 2026-05-14 (Stage 2 of [bringup.md](bringup.md)). Annotations marked **gotcha** flag things that bit us during the run and are not obvious from upstream docs.
 
 ### 1. Install IgH master from source
 
 ```bash
 # Dependencies
-sudo apt install -y autoconf libtool pkg-config
+sudo apt install -y autoconf libtool pkg-config build-essential
 
-# Clone
-git clone https://gitlab.com/etherlab.org/ethercat.git /tmp/ethercat
-cd /tmp/ethercat
-git checkout stable-1.6   # or master if 1.6 lags
+# Clone (keep sources around — we may need to re-build / patch later)
+sudo mkdir -p /opt/ethercat-src && sudo chown "$USER:$USER" /opt/ethercat-src
+git clone https://gitlab.com/etherlab.org/ethercat.git /opt/ethercat-src
+cd /opt/ethercat-src
+# Default branch is `stable-1.6`. As of 2026-05-14 HEAD is 1.6.9.
+# git checkout stable-1.6   # only needed if default ever changes
 
-# Configure for generic driver + no MII
+# Configure for generic driver + no EoE
 ./bootstrap
 ./configure --prefix=/usr/local \
             --enable-generic \
             --disable-8139too \
             --disable-eoe
 
+# *** gotcha *** — `make` without arguments builds ONLY userspace.
+# Kernel modules need a separate target.
 make -j$(nproc)
+make modules -j$(nproc)
+
+# *** gotcha *** — if Secure Boot is enabled, the just-built unsigned
+# .ko files will fail to load with `Key was rejected by service`.
+# See known_issues.md §7. On `grenka` we disabled SB in BIOS for the
+# dev box; production will use DKMS + MOK.
+
 sudo make modules_install install
 sudo depmod
 ```
 
+What `make install` lays down:
+
+| Path | What |
+|---|---|
+| `/lib/modules/$(uname -r)/ethercat/{master,devices}/*.ko` | kernel modules |
+| `/usr/local/bin/ethercat` | userspace control tool |
+| `/usr/local/sbin/ethercatctl` | start/stop script invoked by systemd |
+| `/usr/local/lib/libethercat.so*` | shared lib for the ROS 2 driver |
+| `/usr/local/etc/ethercat.conf` | **default config skeleton** (see §2) |
+| `/lib/systemd/system/ethercat.service` | systemd unit (already in unit search path — no manual copy needed) |
+
 ### 2. Configure master
 
-Edit `/etc/ethercat.conf`:
+**gotcha** — `ethercatctl` reads `${prefix}/etc/ethercat.conf`, i.e. `/usr/local/etc/ethercat.conf` for our prefix. Writing to `/etc/ethercat.conf` (common Linux instinct) is **silently ignored**; the service will fail with `No network cards for EtherCAT specified` even though the file looks right.
+
+Edit `/usr/local/etc/ethercat.conf`:
 
 ```ini
-MASTER0_DEVICE="<MAC_OF_eno1>"
+# MAC of the EtherCAT NIC. `ip link show eno1` to find it.
+MASTER0_DEVICE="74:56:3c:30:04:57"
+
+# Generic driver — RTL8125 has no native IgH driver.
 DEVICE_MODULES="generic"
+
+# *** important for generic mode *** — bring up eno1 before the master starts,
+# otherwise frames time out. ethercatctl handles this when this list is set.
+UPDOWN_INTERFACES="eno1"
 ```
 
-Get the MAC: `ip link show eno1`.
+### 3. Enable and start the systemd service
 
-### 3. Install systemd service
+The unit ships pre-installed in `/lib/systemd/system/`. No need to copy it.
 
 ```bash
-sudo cp /tmp/ethercat/script/ethercat.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable ethercat
-sudo systemctl start ethercat
+sudo systemctl enable --now ethercat
+sudo systemctl status ethercat --no-pager
 ```
+
+If you ever need to override unit behavior (e.g. add `Requires=network.target` when not using `UPDOWN_INTERFACES`), drop a snippet into `/etc/systemd/system/ethercat.service.d/50-local.conf` — don't edit the upstream unit in `/lib/systemd/`.
 
 ### 4. Verify
 
 ```bash
-# Master should be in IDLE state
+# Modules loaded
+lsmod | grep ec_
+# Expected: ec_master, ec_generic
+
+# Master in IDLE state
 ethercat master
 
-# With the test bench connected, slaves should show up
+# With the test bench connected, slaves should show up (Stage 3)
 ethercat slaves
 # Expected (test bench): 2 slaves, A6-750EC + A6-200EC
 ```

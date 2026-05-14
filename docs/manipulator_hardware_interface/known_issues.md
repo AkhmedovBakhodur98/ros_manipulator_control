@@ -83,7 +83,74 @@ LinuxCNC threads we rely on:
 - <https://forum.linuxcnc.org/ethercat/57091-stepperonline-a6-1000ec-driver>
 - <https://forum.linuxcnc.org/ethercat/58666-sanitycheck-my-plan-ethercat-stepperonline-a6>
 
-## 6. Vendor docs we still want
+## 7. Secure Boot blocks locally built kernel modules
+
+**Severity:** medium — hard stop on first `systemctl start ethercat`, easy fix.
+
+Stock Ubuntu 24.04 ships with Secure Boot enabled (`mokutil --sb-state`) and `/sys/kernel/security/lockdown` = `integrity`. Any locally built, unsigned `.ko` is refused by the kernel:
+
+```
+modprobe: ERROR: could not insert 'ec_master': Key was rejected by service
+```
+
+This is `ENOKEY` from `mod_verify_sig` — it does not log a stack trace, just the modprobe error above. The Canonical RT kernel itself is signed and still loads; only our `ec_master.ko` / `ec_generic.ko` are blocked.
+
+**Options:**
+
+1. **Disable Secure Boot in BIOS** — what we did on `grenka` for the dev box. Fast, but the production stand should pick option 2 or 3.
+2. **Sign modules with MOK** — generate a Machine Owner Key, register it via `sudo mokutil --import MOK.der` (the shim prompts for a password and asks for confirmation in the MOK Manager screen on next boot), then sign each module with `kmodsign sha512 MOK.key MOK.der path/to/ec_master.ko`. Must be redone on every rebuild.
+3. **Wrap IgH in DKMS** — write a `dkms.conf` for the IgH source tree so DKMS auto-rebuilds and auto-signs (with MOK) when the kernel updates. IgH is not packaged for DKMS upstream — this is ~1–2 hours of setup but pays for itself on a long-lived rig.
+
+For the dev box, option 1 is acceptable. Once the test bench moves toward production, revisit and pick 2 or 3.
+
+## 8. Default `make` target does not build kernel modules
+
+**Severity:** low — confusing, not dangerous.
+
+In the IgH source tree, `make` builds only userspace (`tool/ethercat`, `libethercat`). Kernel modules `ec_master.ko` / `ec_generic.ko` need a separate `make modules` target. The `make install` step calls `make modules_install` internally, so if you skip `make modules`, install will silently succeed installing zero modules and `lsmod | grep ec_` will return empty on first start.
+
+Always run **both** `make` and `make modules` before `sudo make modules_install install`.
+
+## 9. `ethercatctl` reads `${prefix}/etc/ethercat.conf`, not `/etc/ethercat.conf`
+
+**Severity:** low — wasted ~10 minutes on `grenka`.
+
+With `./configure --prefix=/usr/local`, the config path is `/usr/local/etc/ethercat.conf`. Editing `/etc/ethercat.conf` (the Linux convention) does nothing — `ethercatctl` reads from the prefix path and reports:
+
+```
+ERROR: No network cards for EtherCAT specified.
+Please edit /usr/local/etc/ethercat.conf with root permissions...
+```
+
+The path is hardcoded in `ethercatctl` at install time (substituted from `@sysconfdir@`). Either write to the prefix path, or pass `-c /etc/ethercat.conf` via a service override.
+
+## 10. `make install` does not create the `ethercat` group or udev rule
+
+**Severity:** low — easy fix, but blocks non-root access until you notice.
+
+After `sudo make modules_install install` the device node appears as `crw------- root root /dev/EtherCAT0`. The IgH installer does **not**:
+
+- create the `ethercat` group,
+- install a udev rule that hands the node to that group.
+
+Result: only `sudo ethercat master` works, and any ROS 2 hardware_interface process must run as root — unacceptable for `ros2_control`.
+
+**Fix (one-time, per host):**
+
+```bash
+sudo groupadd -f ethercat
+sudo tee /etc/udev/rules.d/99-ethercat.rules >/dev/null <<'EOF'
+KERNEL=="EtherCAT[0-9]*", MODE="0660", GROUP="ethercat"
+EOF
+sudo udevadm control --reload
+sudo udevadm trigger
+sudo usermod -aG ethercat "$USER"
+# relogin (or `newgrp ethercat`) for group membership to take effect
+```
+
+Verify: `ls -l /dev/EtherCAT0` → `crw-rw---- root ethercat`, then `/usr/local/bin/ethercat master` without `sudo` should print `Phase: Idle`.
+
+## 11. Vendor docs we still want
 
 We would like to ask StepperOnline support for:
 
