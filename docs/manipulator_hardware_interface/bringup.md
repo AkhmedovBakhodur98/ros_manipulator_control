@@ -10,11 +10,11 @@
 - [x] `eno1` (RTL8125) reserved for EtherCAT, WiFi for general internet
 - [x] BIOS RT-tweaks applied (see [rt_tuning.md](rt_tuning.md))
 - [x] GRUB RT flags applied
-- [ ] ROS 2 Jazzy installed
-- [ ] IgH master built and `ethercat.service` running
-- [ ] `ethercat_driver_ros2` cloned and patched (`CLOCK_REALTIME` → `CLOCK_MONOTONIC`, see [known_issues.md](known_issues.md))
-- [ ] Test bench connected: 1× A6-750EC + 1× A6-200EC daisy-chain
-- [ ] Vendor ESI XML installed at `/etc/ethercat/esi/`
+- [x] ROS 2 Jazzy installed (`ros-jazzy-desktop` + `ros-dev-tools` + `ros2_control` + `ros2_controllers`)
+- [x] IgH master built and `ethercat.service` running (Stage 2)
+- [x] `ethercat_driver_ros2` cloned and patched (Stage 5; patches in `patches/`)
+- [x] Test bench connected: 1× A6-750EC + 1× A6-200EC daisy-chain (Stage 3)
+- [x] Userspace RT limits raised (Stage 4; see [rt_tuning.md §Userspace RT Limits](rt_tuning.md))
 
 ## Stage 1 — System Tuning ✅ (closed 2026-05-13)
 
@@ -96,14 +96,22 @@ Implementation: [tools/csp_smoke/csp_smoke.c](../../tools/csp_smoke/csp_smoke.c)
 
 **Exit criterion met:** motor followed the sine smoothly, no following-error faults, kernel log clean in steady state.
 
-## Stage 5 — Build `ethercat_driver_ros2`
+## Stage 5 — Build `ethercat_driver_ros2` ✅ (closed 2026-05-14 on `grenka`)
 
-1. Clone Jazzy branch into `src/`
-2. Apply the `CLOCK_MONOTONIC` patch (see [known_issues.md](known_issues.md))
-3. `rosdep install` + `colcon build`
-4. `source install/setup.bash`
+ROS 2 Jazzy installed (`ros-jazzy-desktop` + `ros-dev-tools` + `ros-jazzy-ros2-control` + `ros-jazzy-ros2-controllers` + `python3-colcon-common-extensions` + `python3-rosdep`). `rosdep init && rosdep update` done.
 
-**Exit criterion:** package builds; `ros2 pkg prefix ethercat_driver` resolves.
+Sub-checklist:
+
+- [x] **5.1 Clone** — `git clone --branch jazzy --depth 1 https://github.com/ICube-Robotics/ethercat_driver_ros2.git src/ethercat_driver_ros2`. Pinned upstream HEAD `066b81a2f54a230af3f54160be41aa53657073e0`.
+- [x] **5.2 Patches** — applied locally, recorded in [patches/ethercat_driver_ros2-icube.patch](patches/ethercat_driver_ros2-icube.patch):
+  - **CLOCK_MONOTONIC** in `ec_master.cpp:312` and `:375` (see [known_issues.md §1](known_issues.md)).
+  - **ETHERLAB_DIR as CACHE PATH** in `ethercat_interface/CMakeLists.txt:21` and `ethercat_manager/CMakeLists.txt:15` (see [known_issues.md §16](known_issues.md)). Without this, `-DETHERLAB_DIR` is silently ignored and downstream packages fail to configure.
+- [x] **5.3 rosdep deps** — `rosdep install --from-paths src/ethercat_driver_ros2 --ignore-src --rosdistro jazzy --simulate` returns empty; everything is satisfied by `ros-jazzy-desktop` + `ros2-control` + `ros2-controllers`.
+- [x] **5.4 colcon build** — `source /opt/ros/jazzy/setup.bash && colcon build --packages-up-to ethercat_driver_ros2 ethercat_generic_cia402_drive ethercat_manager --cmake-args -DETHERLAB_DIR=/usr/local`. All 7 packages finish (`ethercat_driver`, `ethercat_driver_ros2`, `ethercat_generic_cia402_drive`, `ethercat_generic_slave`, `ethercat_interface`, `ethercat_manager`, `ethercat_msgs`).
+- [x] **5.5 Linkage verified** — `ldd install/ethercat_generic_cia402_drive/lib/libethercat_generic_cia402_drive_plugin.so` shows `libethercat_interface.so → install/...` and `libethercat.so.1 → /usr/local/lib/libethercat.so.1` (our Stage 2 IgH).
+- [x] **5.6 ros2 pkg prefix resolves** for all four meaningful packages (`ethercat_driver`, `ethercat_driver_ros2`, `ethercat_generic_cia402_drive`, `ethercat_manager`).
+
+**Exit criterion met:** all packages build, link against `/usr/local/lib/libethercat.so.1`, and `ros2 pkg prefix ethercat_driver` resolves.
 
 ## Stage 6 — Single-Slave ROS Bringup
 

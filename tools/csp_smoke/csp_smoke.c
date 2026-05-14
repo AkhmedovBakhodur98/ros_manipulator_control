@@ -42,8 +42,8 @@
 #define A6_POS          0
 
 #define MODE_CSP        8
-#define SINE_AMPL       5000             /* ~0.04 rev on 17-bit encoder */
-#define SINE_FREQ_HZ    0.2
+#define SINE_AMPL       50000            /* ~0.38 rev = 137° on 17-bit encoder */
+#define SINE_FREQ_HZ    0.5              /* peak vel ≈ 72 rpm */
 #define HOLD_SECONDS    3.0              /* dwell at zero target after enable */
 
 /* --------------------------------------------------------------- IgH state */

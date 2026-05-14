@@ -35,6 +35,10 @@ Thumbs.db
 # In-tree C tool binaries (built next to their .c)
 tools/csp_smoke/csp_smoke
 
+# Third-party ROS sources cloned at bring-up time
+# (Patches we maintain are in docs/manipulator_hardware_interface/patches/)
+src/ethercat_driver_ros2/
+
 # Generated URDF
 *.urdf
 !*.urdf.xacro

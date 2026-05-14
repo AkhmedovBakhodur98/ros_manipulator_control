@@ -190,6 +190,63 @@ When the A6-750EC came up on the bench without a motor connected, its seven-segm
 
 This separation will save time in Stage 4+ when we start chasing OP-state issues — check the EtherCAT layer is clean before debugging the CiA 402 state machine.
 
+## 15. Momentary `WC=0/3` events under external load (A6-EC, 1 ms cycle)
+
+**Severity:** low for single-axis smoke, **medium for multi-axis bring-up under disturbance**.
+
+Observed in Stage 4 smoke (2026-05-14) on A6-200EC at alias 6, csp_smoke driving sine ±50000 counts @ 0.5 Hz, RT-loop on isolated CPU 1 at SCHED_FIFO 80:
+
+- Operator manually loaded the pulley by hand during the cyclic phase.
+- Drive **stayed in OperationEnabled** (`StatusWord = 0x1637`) the entire 24 s of operation — no application-visible fault, no following-error trip (`0x6065` window is 429,483 counts = ~3.3 rev, `0x6072` torque limit at 300 % rated).
+- Kernel log (`journalctl -k`) caught **three brief `Working counter changed to 0/3` events**, each recovering to `3/3` within ~1 s. Each correlated with operator touching the pulley.
+- After teardown, drive `0x603F` (ErrorCode) was latched at `0x8700` "Sync error" (CiA 402 standard code). The latch survives until the next Fault Reset.
+
+**Hypothesis:** under sudden external load, the drive MCU spends more cycles in current-loop / commutation work and occasionally misses the EtherCAT cyclic-data deadline within the SYNC0 window. Master sees zero responding slaves for that one cycle, then the slave recovers on the next. The skipped cycle is logged by the drive as a sync error and latched in `0x603F`, but the drive does not transition to Fault — it keeps tracking.
+
+The 0x8700 we read *after* the test ended is **not necessarily from teardown**. It could have been latched mid-operation by one of the three observed `WC=0/3` events. We can't disambiguate without a higher-resolution log (drive does not timestamp `0x603F` writes).
+
+**Mitigations (not applied yet — capture for Stage 7 multi-axis):**
+
+1. **Tune SYNC0 cycle shift** via SDO `0x1C32:03` (output) / `0x1C33:03` (input). Typical Panasonic / A6-derived recipe is 100–500 µs negative shift, which gives the drive MCU a chunk of the cycle to finish its work before the next SYNC0 fires. Default is 0 — almost no margin.
+2. Consider stepping up cycle time to **2 ms** if a multi-axis bring-up shows sustained `WC=0/3` storms; revisit 1 ms once SYNC0 shift is dialed in.
+3. Keep `Following Error Window` (`0x6065`) generous — current factory value 429,483 counts is fine, do not tighten without empirical justification.
+4. Monitor `0x603F` periodically from the application loop (cheap PDO add) to catch sync-error latches early instead of finding them post-mortem.
+
+**This is not a blocker for Stage 5 / 6 single-slave ROS bring-up.** A real concern only when (a) several axes share the bus and one disturbance can cascade, or (b) production load profile pushes the drive MCU consistently near the deadline.
+
+## 16. `ETHERLAB_DIR` hardcoded in ICube CMakeLists, not a CACHE variable
+
+**Severity:** medium — blocks downstream `find_package(ethercat_interface)` if IgH was installed somewhere other than `/usr/local/etherlab`.
+
+ICube `ethercat_driver_ros2` (jazzy branch, HEAD `066b81a2f54a230af3f54160be41aa53657073e0` as of 2026-05-14) assumes IgH is installed at `/usr/local/etherlab/{include,lib,bin}`. The path is hardcoded in two `CMakeLists.txt`:
+
+- `ethercat_interface/CMakeLists.txt:21` — `set(ETHERLAB_DIR /usr/local/etherlab)`
+- `ethercat_manager/CMakeLists.txt:15`   — `set(ETHERLAB_DIR /usr/local/etherlab)`
+
+Two issues if your IgH prefix is different (we used `/usr/local`, the IgH default):
+
+1. **Compile silently succeeds** because `find_library(... HINTS .../etherlab/lib)` falls through to system search and picks up `/usr/local/lib/libethercat.so`. `#include "ecrt.h"` likewise finds `/usr/local/include/ecrt.h` via the default compiler search path. The build looks fine.
+2. **Downstream `find_package(ethercat_interface)` HARD-FAILS** because `ament_export_include_directories(... ${ETHERLAB_DIR}/include)` bakes `/usr/local/etherlab/include` into the exported CMake config. CMake validates exported paths exist and aborts with:
+
+   > `Imported target "ethercat_interface::ethercat_interface" includes non-existent path "/usr/local/etherlab/include" in its INTERFACE_INCLUDE_DIRECTORIES`
+
+So `ethercat_generic_cia402_drive`, `ethercat_generic_slave`, etc., fail to configure.
+
+Passing `-DETHERLAB_DIR=/usr/local` to colcon does **not** help, because `set(... )` without `CACHE` unconditionally overwrites any -D flag at configure time. CMake warns "Manually-specified variables were not used" — that's the tell.
+
+**Fix (two-line patch, in the cloned source):**
+
+```diff
+-set(ETHERLAB_DIR /usr/local/etherlab)
++set(ETHERLAB_DIR /usr/local/etherlab CACHE PATH "Path to EtherLab/IgH installation prefix")
+```
+
+Apply to both `CMakeLists.txt` files. Then `colcon build --cmake-args -DETHERLAB_DIR=/usr/local` works.
+
+Combined with [§1](#1-clock_realtime-in-dc-sync-bug-in-icube-driver) this becomes the **ICube driver patch we maintain locally** — see `docs/manipulator_hardware_interface/patches/ethercat_driver_ros2-icube.patch` (4 hunks, 6 lines changed total: 2 for CLOCK_MONOTONIC, 2 for `ETHERLAB_DIR CACHE PATH`). The patch is regenerated by `git diff` against the pinned upstream HEAD.
+
+**Alternative (not chosen):** reinstall IgH under `/usr/local/etherlab` to match the ICube assumption. Pros: zero source patches. Cons: existing `ethercat.service`, ldconfig, `/usr/local/etc/ethercat.conf` paths all baked into the working Stage 2/3/4 setup — disruptive for no value.
+
 ## 14. Vendor docs we still want
 
 We would like to ask StepperOnline support for:
