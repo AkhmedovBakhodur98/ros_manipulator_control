@@ -1,6 +1,6 @@
 # manipulator_hardware_interface Package Documentation
 
-> **Status (2026-05-14): Stage 6 closed (10-min soak passed).** The `src/manipulator_hardware_interface/` package now exists — config-only (no C++), shipping the A6-200EC slave PDO YAML and the bench `controllers.yaml`. The bench A6-200EC is brought to OP under `ros2_control` via `manipulator_bringup/launch/ethercat_bench.launch.py`, FPC tracks target with 1-count error, and a 600-second steady-state soak under `chrt -f 80` + NIC-IRQ-on-CPU-1 logs **zero** EtherCAT kernel events and zero controller_manager overruns. **Stage 6.5** remains partially open: persist the IRQ pin across reboots (the `ethercat-irq-pin.service` recipe in [rt_tuning.md](rt_tuning.md) is documented but not yet installed on `grenka`), and optionally wrap the launch as a systemd unit so the user does not need to remember `chrt`.
+> **Status (2026-06-08): Stage 6 + 6.5 (IRQ-pin) + 6.6a closed on bench (10-min soak, 2 slaves); Stage 6.6b code in tree, hardware verify pending.** The `manipulator_hardware_interface` package ships the generic `a6_slave.yaml` (one PDO map for all A6N variants — 200EC / 400EC / 750EC share product code 0x00000715) and two controllers YAMLs: bench (single slave) and full (6 slaves). Stage 6.6b extended the slave YAML with `control_word` command_interface, `status_word` state_interface and an SDO init block for homing parameters (method 35 = current-pos-zero by default). The full URDF, JointTrajectoryController + helper `ForwardCommandController`s on `control_word` / `mode_of_operation`, homing action server, safety / limit monitor and a 4 h soak harness are all in tree. Next hardware step (operator-scheduled): connect all 6 drives, burn aliases 1..6 via `docs/.../system/ethercat-alias-program.sh`, run the soak test (`manipulator_diagnostics/launch/soak_test.launch.py`, 3-4 h sine motion on all 6 joints).
 
 ## Overview
 
@@ -45,7 +45,7 @@ The test bench is currently 2 slaves: 1× A6-750EC + 1× A6-200EC. Full chain is
 
 ---
 
-## Package Layout (current as of Stage 6, 2026-05-14)
+## Package Layout (current as of Stage 6.6b, 2026-06-08)
 
 ```
 src/manipulator_hardware_interface/
@@ -53,43 +53,52 @@ src/manipulator_hardware_interface/
 ├── package.xml                               # exec_depend: ethercat_driver, ethercat_generic_cia402_drive, joint_state_broadcaster, joint_trajectory_controller, forward_command_controller
 └── config/
     ├── ethercat/
-    │   └── a6_200ec_slave.yaml               # 1:1 of csp_smoke PDO/DC (variable 0x1600/0x1A00 + 0x6060/0x6061 remap, AssignActivate=0x300, auto_fault_reset)
-    └── ethercat_bench_controllers.yaml       # controller_manager 1000 Hz + joint_state_broadcaster + forward_position_controller (active) + bench_trajectory_controller (inactive)
+    │   └── a6_slave.yaml                     # Generic A6N PDO/DC + SDO init (was a6_200ec_slave.yaml; ESI declares one product code for 200/400/750EC, one YAML drives all 6 drives). Variable 0x1600/0x1A00, AssignActivate=0x300, auto_fault_reset, control_word command_interface, status_word state_interface, sdo_config for homing (0x6098=35, 0x6099/609A bench-safe).
+    ├── ethercat_bench_controllers.yaml       # Single-slave bench: 1000 Hz controller_manager + JSB + FPC (active) + bench JTC (inactive). Survives for regression Stage 6.6a-style probes.
+    └── ethercat_full_controllers.yaml       # 6-slave full chain (Stage 6.6b): 1000 Hz controller_manager + JSB on 6 joints + manipulator_trajectory_controller (active) + control_word_controller + mode_of_operation_controller (inactive — activated by homing action server on demand).
 ```
 
-What is intentionally NOT here yet (will arrive at later stages):
+The split between bench and full controllers YAMLs is deliberate: the bench config still drives a one-axis regression environment if we ever need to bisect a problem to a single drive without disassembling the production chain. The slave YAML is shared.
 
-- **`config/ethercat/a6_400ec_slave.yaml` / `a6_750ec_slave.yaml`** — only the bench drive (200EC) is needed for Stage 6. The 750EC bench drive has no motor and stays in PREOP. Other slaves arrive at Stage 7 (full chain).
+What is intentionally NOT here:
+
+- **Per-variant slave YAMLs** (`a6_200ec_slave.yaml`, `a6_400ec_slave.yaml`, `a6_750ec_slave.yaml`) — ESI XML in [vendor/](vendor/) declares a single `<Type ProductCode="#x00000715">A6N Servo Driver</Type>` for the entire family. They share the object dictionary; one YAML suffices.
 - **`config/ethercat/master.yaml`** — IgH master config lives at `/usr/local/etc/ethercat.conf`, managed by `ethercatctl` (Stage 2). There is no per-launch master YAML for ICube — the master is a system service, not a launch-time process.
-- **`launch/`** — launch wiring lives in `manipulator_bringup/launch/ethercat_bench.launch.py` to colocate with the existing manipulator/AR4/SCARA launches, not to scatter launch files across packages.
+- **`launch/`** — launch wiring lives in `manipulator_bringup/launch/` (`ethercat_bench.launch.py`, `ethercat_full.launch.py`) and `manipulator_diagnostics/launch/soak_test.launch.py`, not scattered into this package.
 - **`udev/99-ethercat.rules`** — installed as a host config in Stage 2 (`/etc/udev/rules.d/99-ethercat.rules`), not packaged. See [bringup.md §Stage 2.8](bringup.md).
-- **`scripts/irq_pinning.sh` / `ethtool_tuning.sh`** — currently lives as documentation in [rt_tuning.md](rt_tuning.md). Stage 6.5 may promote them to systemd units.
 
 The package is `ament_cmake` (consistent with `ar4_hardware_interface`) even though it contains no C++ — this keeps install rules straightforward for the YAML files.
 
 ---
 
-## Joint → Slave Mapping (Planned)
+## Joint → Drive Mapping (Stage 6.6b, EEPROM aliases burned by `ethercat-alias-program.sh`)
 
-| Slave # | Drive model | Robot | Joint | Notes |
-|---------|-------------|-------|-------|-------|
-| 0 | A6-750EC | manipulator | Z (vertical lift) | High inertia, long travel |
-| 1 | A6-750EC | manipulator | X (linear rail) | High inertia, long travel |
-| 2 | A6-750EC | manipulator | A (selector) | Medium |
-| 3 | A6-750EC | SCARA | shoulder | Medium |
-| 4 | A6-400EC | SCARA | elbow | Light |
-| 5 | A6-200EC | SCARA | wrist | Lightest |
+| URDF joint | Robot | Model | Alias | Position-in-chain |
+|------------|-------|-------|-------|-------------------|
+| `base_main_frame_joint` | manipulator | A6-750EC | 1 | 0 |
+| `main_frame_selector_frame_joint` | manipulator | A6-750EC | 2 | 1 |
+| `selector_frame_picker_frame_joint` | manipulator | A6-750EC | 3 | 2 |
+| `scara_shoulder_joint` | SCARA | A6-750EC | 4 | 3 |
+| `scara_elbow_joint` | SCARA | A6-400EC | 5 | 4 |
+| `scara_wrist_joint` | SCARA | A6-200EC | 6 | 5 |
 
-Exact bus order will be defined by physical daisy-chain order; we'll renumber here once the chain is laid out.
+The Y-jaws (`selector_left_container_jaw_joint`, `selector_right_container_jaw_joint`) are NOT actuated by EtherCAT — they appear in the geometric URDF for visualisation only.
+
+The URDF (`manipulator_ethercat_full.urdf.xacro`) addresses drives by `alias` (with `position=0` placeholder), so once `ethercat-alias-program.sh` has burned the EEPROM aliases the physical cable order can be reshuffled without editing config.
 
 ---
 
 ## Related Documentation
 
-- [bringup.md](bringup.md) — Step-by-step bringup procedure (Stages 1-6 + 6.5 IRQ-pin + 6.6a endstops closed on `grenka`; Stage 6.6b homing action server is the next step)
+- [bringup.md](bringup.md) — Step-by-step bringup procedure (Stages 1-6 + 6.5 IRQ-pin + 6.6a closed on bench; Stage 6.6b code in tree, hardware verify pending)
 - [a6_dio_mapping.md](a6_dio_mapping.md) — A6-EC CN1 DI/DO pinout, `0x60FD` bit layout, drive-side overtravel behaviour
-- `../manipulator_description/package_structure.md` — `manipulator_ethercat_test.urdf.xacro` macro (`bench_joint` on EthercatDriver)
-- `../manipulator_bringup/package_structure.md` — `ethercat_bench.launch.py` Stage 6 launch
+- `../../src/manipulator_description/urdf/manipulator/manipulator_ethercat_test.urdf.xacro` — single bench joint on EthercatDriver (Stage 6 regression environment)
+- `../../src/manipulator_description/urdf/manipulator/manipulator_ethercat_full.urdf.xacro` — 6-joint full chain on EthercatDriver (Stage 6.6b, addressed by alias)
+- `../../src/manipulator_bringup/launch/ethercat_bench.launch.py` — Single-slave bring-up
+- `../../src/manipulator_bringup/launch/ethercat_full.launch.py` — Full 6-slave bring-up + homing action server + safety monitor
+- `../../src/manipulator_diagnostics/launch/soak_test.launch.py` — 3-4 h soak test on top of `ethercat_full` (sine on all 6 joints + CSV metrics + auto-shutdown)
+- `../../src/manipulator_msgs/` — `HomeJoints.action`, `OvertravelEvent.msg` (Stage 6.6b interfaces)
+- `../../src/manipulator_homing/` — `homing_action_server` (CiA 402 mode 6 driver) + `safety_monitor` (lifts the JTC SUCCEEDED-while-clamped trap from Stage 6.6a)
 - [ethercat_setup.md](ethercat_setup.md) — IgH master install, kernel modules, systemd service, /dev/EtherCAT0 permissions
 - [rt_tuning.md](rt_tuning.md) — Real-time kernel tuning, IRQ pinning, NIC offload tuning, userspace RT limits under GDM
 - [a6_pdo_mapping.md](a6_pdo_mapping.md) — A6-EC specific CiA 402 PDO map, verified identity, operational parameters

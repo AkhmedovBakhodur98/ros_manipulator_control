@@ -184,7 +184,45 @@ Drive latched `0x603F = 0x5443` (vendor alarm code, decoding deferred to Chapter
 
 The full DI/DO map and bit semantics are in [a6_dio_mapping.md](a6_dio_mapping.md). Manual is vendored at [`vendor/A6-EC_series_servo_drive_manual.pdf`](vendor/A6-EC_series_servo_drive_manual.pdf).
 
-**Stage 6.6b (deferred)** — write a homing action server that switches `mode_of_operation` to 6, drives ControlWord bit 4 rising edge, polls StatusWord bit 12 for completion, then switches back to CSP. Will use CiA 402 homing method 1 (search N-OT then nearest Z) or 2 (search P-OT then Z) — see [a6_pdo_mapping.md §CiA 402 State Machine](a6_pdo_mapping.md) and the Homing parameters table in [a6_dio_mapping.md](a6_dio_mapping.md). Speeds (`0x6099:01/02`) must be cut from the factory ~6400/640 rpm defaults to bench-safe values (~50000/5000 counts/s).
+## Stage 6.6b — Homing action server + safety/limit monitor + full 6-slave bring-up (code in tree, hardware verify pending)
+
+Stage 6.6a closed observability of the limit switches and proved the drive self-clamps; Stage 6.6b adds the application layer that drives a homing run and the side-channel that exposes overtravel events to consumers (lifting the JTC `SUCCEEDED`-while-clamped trap from Stage 6.6a). It also expands the bench config from a single A6-200EC to the full 6-drive production chain.
+
+**Code added (no hardware yet — the bench was disassembled between Stage 6.6a and the production drives arriving):**
+
+- `config/ethercat/a6_slave.yaml` — renamed from `a6_200ec_slave.yaml`. ESI XML declares only one product code 0x00000715 for the entire A6N family (200EC / 400EC / 750EC share the object dictionary); one YAML drives all 6 joints. Adds:
+  - `command_interface: control_word` on RPDO 0x6040 — homing action server writes bit 4.
+  - `state_interface: status_word` on TPDO 0x6041 — action server polls bit 12 / bit 13, safety node polls bit 11.
+  - `sdo_config` with bench-safe homing parameters (method 35 = current position becomes zero, no motion; search velocities 5000 / 1000 counts/s; accel 5000 counts/s²; offset 0). Method 35 is the safest default for first-light — it tests the whole flip-mode-and-poll-bit-12 pipeline without any axis actually moving. Switch to method 17 (N-OT, no index) or 18 (P-OT, no index) per joint after we see where each hardstop sits. Method 1/2 (with Z) is in principle possible (17-bit serial encoder exposes a virtual index) but unverified and not necessary for first bring-up.
+- `manipulator_description/urdf/manipulator/manipulator_ethercat_full.urdf.xacro` — full 6-joint ros2_control system. Joint↔drive mapping (4× A6-750EC + 1× A6-400EC + 1× A6-200EC; Y-jaws excluded — not actuated by EtherCAT):
+  | URDF joint | model | alias |
+  | ---------- | ----- | ----- |
+  | `base_main_frame_joint` (X rail) | A6-750EC | 1 |
+  | `main_frame_selector_frame_joint` (Z lift) | A6-750EC | 2 |
+  | `selector_frame_picker_frame_joint` (Z picker) | A6-750EC | 3 |
+  | `scara_shoulder_joint` | A6-750EC | 4 |
+  | `scara_elbow_joint` | A6-400EC | 5 |
+  | `scara_wrist_joint` | A6-200EC | 6 |
+  `use_scara:=false` drops aliases 4..6 so the 3 base axes can be brought up without the SCARA arm physically attached.
+- `robot.urdf.xacro` — new `hardware:=ethercat_full` mode wires the macro in.
+- `config/ethercat_full_controllers.yaml` — `JointTrajectoryController` (primary motion) + two `ForwardCommandController` instances on `control_word` and `mode_of_operation` (inactive at bring-up; activated on demand by the homing action server). `joint_state_broadcaster` covers all 6.
+- `manipulator_msgs/` — new pkg, holds `HomeJoints.action` (subset-of-joints supported via `joint_names: [...]`) and `OvertravelEvent.msg`.
+- `manipulator_homing/` — new pkg, two nodes:
+  - `homing_action_server` — exposes `/home_joints`. For each requested joint sequentially: deactivate motion controllers via `controller_manager/switch_controller`, flip mode to 6, raise CW bit 4, poll StatusWord bit 12 / 13, drop bit 4, flip mode back to 8, re-activate motion controllers. Subset goals supported (`joint_names: ['scara_wrist_joint']`); empty list = all six in the canonical order.
+  - `safety_monitor` — watches every joint's `status_word` (bit 11) and `digital_inputs` (bits 0–1) on `/dynamic_joint_states`, emits `/overtravel_events` on edges. `trip_action: hold` parameter (default `log_only`) can additionally deactivate motion controllers on a trip. Lifts the JTC `SUCCEEDED`-while-clamped trap from Stage 6.6a.
+- `manipulator_bringup/launch/ethercat_full.launch.py` — assembles everything; pattern matches `ethercat_bench.launch.py`. Wrap in `chrt -f 80` for the Stage 6 RT recipe.
+- `docs/.../system/ethercat-alias-program.sh` — one-shot script to burn aliases 1..6 into the drives' EEPROM along the documented physical cable order, so the URDF can stop caring about cable shuffles.
+
+**Verification plan once the production drives are connected:**
+
+1. Connect 6 drives in the documented order, run `ethercat-alias-program.sh`, power-cycle, confirm `ethercat slaves` shows aliases 1..6.
+2. `chrt -f 80 ros2 launch manipulator_bringup ethercat_full.launch.py` — confirm every joint reaches OperationEnabled, JTC active.
+3. `ros2 action send_goal /home_joints manipulator_msgs/action/HomeJoints '{joint_names: ["scara_wrist_joint"]}'` — first joint to home is the lightest one (200EC). With method 35 the drive must not move; `mode_of_operation_display` cycles 8 → 6 → 8, StatusWord bit 12 latches during the homing window, action result is `success: true`.
+4. Repeat for each remaining joint, one at a time; then for the full list (empty `joint_names`).
+5. Hold P-OT on one drive while issuing a motion command — `/overtravel_events` must publish `p_ot_active: true, internal_limit_active: true`. Release → clear event with all booleans false.
+6. Per-axis: change `0x6098` to 17 or 18 (the direction matching that axis' wired hardstop), re-run `/home_joints` for just that axis at slow search velocity, confirm motor approaches the switch and stops.
+
+**Exit criterion:** every joint can be homed independently and in batch; safety monitor reacts to every overtravel edge; 10-min soak with JTC streaming a low-amplitude trajectory across all 6 joints shows no kernel WC/UNMATCHED/SKIPPED/TIMED OUT events.
 
 ## Stage 6.5 — RT-tuning persistence ✅ IRQ-pin closed (2026-05-14); launch wrapper / thread_priority deferred
 
@@ -198,16 +236,21 @@ Stage 6 verified the recipe works in a one-off shell; Stage 6.5 makes it survive
 2. **`controller_manager` ROS parameter `thread_priority`** — if it actually overrides the SCHED_FIFO 50 default, we drop the `chrt` wrapper entirely. Untested in our setup; not blocking.
 3. **NIC offload tuning** (`ethtool -K eno1 gso off gro off ...`, link speed lock) — recipe already in [rt_tuning.md §NIC Tuning](rt_tuning.md). Stage 6 exit criterion passed *without* it on a 2-slave bus, so deferred until Stage 7 multi-slave shows whether it's actually needed.
 
-## Stage 7 — Full Chain Bringup
+## Stage 7 — Full chain bringup (3-4 h soak test) — pending hardware day
 
-After successful single-slave validation:
+Stage 6.6b code (full URDF, single shared slave YAML, multi-slave controllers, homing/safety, soak harness) lives in tree as of 2026-06-08. Items 1-3 of the original Stage 7 list are therefore already done — what remains is the hardware day:
 
-1. Connect all 6 slaves in the production daisy-chain order
-2. Add YAML configs for A6-400EC and A6-200EC
-3. Add ros2_control YAML for full manipulator + SCARA joint set
-4. Bring up; validate joint-by-joint with low-amplitude motion
+1. **Connect all 6 drives** in the order documented in [`system/ethercat-alias-program.sh`](system/ethercat-alias-program.sh) (X rail → Z lift → Z picker → SCARA shoulder → SCARA elbow → SCARA wrist).
+2. **Burn aliases 1..6** by running that script once. Power-cycle drives, verify `ethercat slaves` shows the alias column populated, then cable order can be reshuffled freely.
+3. **Smoke test (2 minutes)** — `chrt -f 80 ros2 launch manipulator_diagnostics soak_test.launch.py duration_min:=2 csv_path:=/tmp/soak_smoke.csv`. Confirm all 6 joints reach OperationEnabled, sine motion runs, CSV file gets a row per second, no immediate kernel warnings.
+4. **Full soak (3-4 h)** — same launch with `duration_min:=240`. In a separate root shell: `sudo cyclictest -p 99 -t -m -i 1000 --output=/tmp/cyclictest.log` (not auto-started from the launch — prio-99 needs sudo and running it inside the same process tree as the controllers conflates failure modes).
+5. **Stage 6.6b homing verify** (after the soak passes) — `ros2 action send_goal /home_joints manipulator_msgs/action/HomeJoints '{joint_names: ["scara_wrist_joint"]}'` per the Stage 6.6b verification plan above.
 
-**Exit criterion:** all 6 joints respond, jitter monitoring is clean, no overruns in 1h continuous operation.
+**Exit criterion:** 3-4 h soak under sine motion on all 6 joints with `ec_lost_frames_delta == 0`, `ec_tx_errors_delta == 0`, `kernel_wc_zero_delta == 0`, `jtc_overrun_total` does not grow once steady-state is reached, and `cyclictest` worst-case latency < 100 µs.
+
+The harness (`manipulator_diagnostics/soak_monitor`) writes one CSV row per second (frame jitter avg/max, StatusWord bit 11/13 edge counters, overtravel total, EtherCAT lost/tx deltas, kernel WC counters) and prints a summary every 5 min to stdout — operator only has to watch the summary line (per [feedback-bench-interactive](../../../.claude/projects/-home-grenka-ros-manipulator-control/memory/feedback_bench_interactive.md) memo: snapshots > realtime log spam).
+
+The TimerAction inside the launch fires Shutdown automatically after `duration_min`; no babysitting needed.
 
 ## Stage 8 — Integration with Existing Stack
 
