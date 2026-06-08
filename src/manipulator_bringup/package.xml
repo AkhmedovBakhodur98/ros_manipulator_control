@@ -16,6 +16,9 @@
   <depend>ros_control</depend>
   <depend>manipulator_hardware_interface</depend>
 
+  <!-- Stage 6.6b — homing action server + safety/limit monitor live here -->
+  <exec_depend>manipulator_homing</exec_depend>
+
   <!-- Runtime dependencies -->
   <exec_depend>controller_manager</exec_depend>
   <exec_depend>robot_state_publisher</exec_depend>
