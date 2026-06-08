@@ -1,0 +1,88 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    ros2_control hardware interface for the full EtherCAT chain (Stage 6.6b
+    onwards). All six A6N drives in one <system> block under ICube's
+    EthercatDriver + EcCiA402Drive plugin; one shared a6_slave.yaml — the
+    object dictionary is identical across A6-200EC / 400EC / 750EC (vendor
+    ESI declares a single ProductCode 0x00000715).
+
+    Joint to drive mapping (alias is burned into the drive EEPROM via
+    `ethercat alias -p <position> <num>` once per drive; physical chain
+    order then stops mattering for URDF):
+
+      base_main_frame_joint           (X rail)        : A6-750EC alias 1
+      main_frame_selector_frame_joint (Z lift)        : A6-750EC alias 2
+      selector_frame_picker_frame_joint (Z picker)    : A6-750EC alias 3
+      scara_shoulder_joint                            : A6-750EC alias 4
+      scara_elbow_joint                               : A6-400EC alias 5
+      scara_wrist_joint                               : A6-200EC alias 6
+
+    Y-jaws (selector_left/right_container_jaw_joint) are NOT in this
+    ros2_control block: they are not actuated by EtherCAT in the
+    production manipulator; they live in URDF only for visualisation.
+
+    use_scara=false keeps the SCARA joints out, letting us bring up
+    just the three base axes without the SCARA arm physically attached.
+  -->
+
+  <xacro:macro name="manipulator_ethercat_full" params="slave_config_dir use_scara:=true">
+
+    <xacro:property name="slave_yaml" value="${slave_config_dir}/a6_slave.yaml"/>
+
+    <ros2_control name="manipulator_ec_full" type="system">
+
+      <hardware>
+        <plugin>ethercat_driver/EthercatDriver</plugin>
+        <param name="master_id">0</param>
+        <!-- Must match the SYNC0 cycle implied by assign_activate=0x300
+             in a6_slave.yaml. Stage 6 ran at 1 kHz; revisit when the
+             6-slave bus jitter measurement comes in (Stage 7 exit). -->
+        <param name="control_frequency">1000</param>
+      </hardware>
+
+      <!-- ============================================================
+           BASE assemblies (3 × A6-750EC, aliases 1..3)
+           ============================================================ -->
+
+      <xacro:macro name="a6_joint" params="name alias">
+        <joint name="${name}">
+          <command_interface name="position"/>
+          <command_interface name="control_word"/>
+          <command_interface name="mode_of_operation"/>
+          <state_interface name="position"/>
+          <state_interface name="velocity"/>
+          <state_interface name="mode_of_operation"/>
+          <state_interface name="status_word"/>
+          <state_interface name="digital_inputs"/>
+          <ec_module name="A6N_${name}">
+            <plugin>ethercat_generic_plugins/EcCiA402Drive</plugin>
+            <param name="alias">${alias}</param>
+            <param name="position">0</param>
+            <param name="mode_of_operation">8</param>  <!-- CSP at bring-up; action server toggles to 6 for homing -->
+            <param name="slave_config">${slave_yaml}</param>
+          </ec_module>
+        </joint>
+      </xacro:macro>
+
+      <xacro:a6_joint name="base_main_frame_joint"             alias="1"/>
+      <xacro:a6_joint name="main_frame_selector_frame_joint"   alias="2"/>
+      <xacro:a6_joint name="selector_frame_picker_frame_joint" alias="3"/>
+
+      <!-- ============================================================
+           SCARA arm (750EC + 400EC + 200EC, aliases 4..6)
+           Conditional so the base-only bring-up still parses when the
+           SCARA arm is not on the bench.
+           ============================================================ -->
+      <xacro:if value="${use_scara}">
+        <xacro:a6_joint name="scara_shoulder_joint" alias="4"/>
+        <xacro:a6_joint name="scara_elbow_joint"    alias="5"/>
+        <xacro:a6_joint name="scara_wrist_joint"    alias="6"/>
+      </xacro:if>
+
+    </ros2_control>
+
+  </xacro:macro>
+
+</robot>

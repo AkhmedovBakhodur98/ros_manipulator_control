@@ -22,7 +22,11 @@
     hardware: which ros2_control plugin to wire up.
       mock           - mock_components/GenericSystem on every joint (default, no hardware)
       ethercat_bench - single bench_joint on EthercatDriver+EcCiA402Drive (Stage 6 bring-up)
-    For the bench mode, slave_config_dir must point at the directory holding
+      ethercat_full  - all six manipulator+SCARA drives on the EtherCAT chain
+                       (Stage 6.6b onwards; pairs with use_scara to drop the
+                       three SCARA joints out when only the base is on the
+                       bench).
+    For the EtherCAT modes, slave_config_dir must point at the directory holding
     the per-slave YAML (typically $(find manipulator_hardware_interface)/config/ethercat).
   -->
   <xacro:arg name="hardware" default="mock"/>
@@ -37,6 +41,7 @@
   <!-- Load ros2_control hardware interface (mock + bench variants) -->
   <xacro:include filename="$(find manipulator_description)/urdf/manipulator/manipulator_ros2_control.urdf.xacro"/>
   <xacro:include filename="$(find manipulator_description)/urdf/manipulator/manipulator_ethercat_test.urdf.xacro"/>
+  <xacro:include filename="$(find manipulator_description)/urdf/manipulator/manipulator_ethercat_full.urdf.xacro"/>
 
   <!-- Load SCARA ros2_control hardware interface (when SCARA is used) -->
   <xacro:include filename="$(find scara_description)/urdf/scara_ros2_control.urdf.xacro"/>
@@ -69,6 +74,11 @@
     <xacro:if value="${'$(arg hardware)' == 'ethercat_bench'}">
       <xacro:manipulator_ethercat_bench
         slave_config_dir="$(arg slave_config_dir)"/>
+    </xacro:if>
+    <xacro:if value="${'$(arg hardware)' == 'ethercat_full'}">
+      <xacro:manipulator_ethercat_full
+        slave_config_dir="$(arg slave_config_dir)"
+        use_scara="$(arg use_scara)"/>
     </xacro:if>
   </xacro:if>
 

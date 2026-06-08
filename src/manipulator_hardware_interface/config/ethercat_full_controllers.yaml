@@ -1,0 +1,96 @@
+# Controllers for the full 6-slave EtherCAT chain (Stage 6.6b onwards).
+#
+# Joint order is fixed across every controller and the homing action
+# server (`manipulator_homing` parameter `joints`) — Float64MultiArray
+# slot i corresponds to the joint at index i in this list. Reordering
+# here means reordering in the action server config too.
+#
+# Values are RAW encoder counts (17-bit absolute, 131072 counts/rev,
+# no scaling in slave YAML yet). Trajectory limits will tighten once
+# each axis' gear ratio + mechanical envelope is known.
+
+controller_manager:
+  ros__parameters:
+    update_rate: 1000  # Hz — must equal URDF control_frequency and SYNC0 cycle
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    manipulator_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+    # Helper controllers giving the homing action server direct
+    # ownership of control_word + mode_of_operation. Inactive at
+    # bring-up (the JTC owns position; these two own non-position
+    # interfaces and don't clash with it, but keeping them inactive
+    # until the action server claims them avoids accidental writes
+    # from a stale topic publisher).
+    control_word_controller:
+      type: forward_command_controller/ForwardCommandController
+
+    mode_of_operation_controller:
+      type: forward_command_controller/ForwardCommandController
+
+
+joint_state_broadcaster:
+  ros__parameters:
+    joints:
+      - base_main_frame_joint
+      - main_frame_selector_frame_joint
+      - selector_frame_picker_frame_joint
+      - scara_shoulder_joint
+      - scara_elbow_joint
+      - scara_wrist_joint
+    # Also publish the extra A6N state_interfaces on /dynamic_joint_states
+    # so the homing action server and safety monitor can observe them.
+    extra_joints: []
+
+
+manipulator_trajectory_controller:
+  ros__parameters:
+    joints:
+      - base_main_frame_joint
+      - main_frame_selector_frame_joint
+      - selector_frame_picker_frame_joint
+      - scara_shoulder_joint
+      - scara_elbow_joint
+      - scara_wrist_joint
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    state_publish_rate: 100.0
+    action_monitor_rate: 20.0
+    allow_partial_joints_goal: false
+    # No URDF joint_limits yet — see Stage 6.6a finding (drive does its
+    # own following-error window 0x6065). Leave tolerances loose; the
+    # safety monitor catches overtravel and the homing action server
+    # owns mode transitions.
+    constraints:
+      stopped_velocity_tolerance: 0.0
+      goal_time: 0.0
+
+
+control_word_controller:
+  ros__parameters:
+    joints:
+      - base_main_frame_joint
+      - main_frame_selector_frame_joint
+      - selector_frame_picker_frame_joint
+      - scara_shoulder_joint
+      - scara_elbow_joint
+      - scara_wrist_joint
+    interface_name: control_word
+
+
+mode_of_operation_controller:
+  ros__parameters:
+    joints:
+      - base_main_frame_joint
+      - main_frame_selector_frame_joint
+      - selector_frame_picker_frame_joint
+      - scara_shoulder_joint
+      - scara_elbow_joint
+      - scara_wrist_joint
+    interface_name: mode_of_operation
