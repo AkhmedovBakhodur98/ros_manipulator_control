@@ -1,0 +1,29 @@
+# Home a set of joints sequentially through CiA 402 mode 6.
+# Stage 6.6b: implements the recipe from a6_dio_mapping.md §Known unknowns 4.
+
+# ---- GOAL ----
+# Joints to home, in order. Empty list = home every joint advertised by the
+# current hardware interface. Per-joint timeout in seconds (0 = use the
+# server's default of 30 s, which covers method 17/18 on the longest axis
+# at the bench-safe 5000 counts/s search-for-switch velocity from a6_slave.yaml).
+string[] joint_names
+float64  timeout
+
+---
+
+# ---- RESULT ----
+# success is true iff EVERY requested joint reported HomingAttained
+# (StatusWord bit 12 = 1, bit 13 = 0) within timeout.
+bool     success
+string   message
+string[] homed_joints
+string[] failed_joints
+
+---
+
+# ---- FEEDBACK ----
+# Published once per state change while a joint is being processed so the
+# operator can follow progress without tail -F the action_monitor topic.
+string current_joint
+string phase              # entering_homing_mode | homing_in_progress | leaving_homing_mode | done | error
+uint16 status_word        # raw 0x6041 of current_joint at the moment of the feedback
